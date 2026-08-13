@@ -3,7 +3,11 @@ import base64
 import json
 import logging
 
-import cv2
+try:
+    import cv2
+except Exception:
+    cv2 = None
+
 import numpy as np
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
