@@ -1,0 +1,78 @@
+# ==============================================================================
+# Pro-Level Git Ignore Configuration for ClassAbly
+# ==============================================================================
+
+# --- Environments & Virtual Envs ---
+.venv/
+venv/
+ENV/
+env/
+pythonenv*/
+*.env
+!.env.example
+
+# --- Python Bytecode & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Uploads, Media & Recordings ---
+uploads/
+*/uploads/
+uploads/recordings/
+*.webm
+*.mp4
+*.mp3
+*.wav
+*.m4a
+debug_*.jpg
+debug_*.png
+ocr_processed.jpg
+ocr_region.jpg
+
+# --- Databases & Local Storage ---
+*.db
+*.sqlite
+*.sqlite3
+test_*.db
+test_e2e_classably.db
+notes_cache/
+
+# --- Node & Frontend Build Artifacts ---
+node_modules/
+dist/
+build/
+.output/
+.next/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Weights, Large Models & Zips ---
+*.zip
+*.pt
+*.onnx
+*.bin
+*.pth
+yolo11n.pt
+
+# --- Temporary & Scratch Files ---
+scratch/
+test_paddle.py
+scratch_20_users.json
+
+# --- IDEs, Editors & OS Files ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

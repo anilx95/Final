@@ -1,0 +1,13 @@
+SAFE_DISTANCE = 150
+
+WARNING_DISTANCE = 100
+
+CRITICAL_DISTANCE = 50
+
+LEFT = "left"
+
+RIGHT = "right"
+
+FORWARD = "forward"
+
+STOP = "stop"

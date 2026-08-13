@@ -20,6 +20,7 @@ import { Settings } from './pages/auth/Settings';
 // Admin Portal Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { UserManagement } from './pages/admin/UserManagement';
+import { TeacherRecordingsManager } from './pages/admin/TeacherRecordingsManager';
 import { AcademicsManagement } from './pages/admin/AcademicsManagement';
 import { DeviceManagement } from './pages/admin/DeviceManagement';
 import { AuditLogs } from './pages/admin/AuditLogs';
@@ -86,6 +87,7 @@ const router = createBrowserRouter([
             children: [
               { path: '/admin', element: <AdminDashboard /> },
               { path: '/admin/users', element: <UserManagement /> },
+              { path: '/admin/recordings', element: <TeacherRecordingsManager /> },
               { path: '/admin/academics', element: <AcademicsManagement /> },
               { path: '/admin/devices', element: <DeviceManagement /> },
               { path: '/admin/audit-logs', element: <AuditLogs /> },
@@ -135,7 +137,7 @@ export const App: React.FC = () => {
       <AuthProvider>
         <AccessibilityProvider>
           <ToastProvider>
-            <RouterProvider router={router} future={{ v7_startTransition: true, v7_relativeSplatPath: true }} />
+            <RouterProvider router={router} future={{ v7_startTransition: true }} />
           </ToastProvider>
         </AccessibilityProvider>
       </AuthProvider>

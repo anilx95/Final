@@ -16,10 +16,13 @@ export default defineConfig({
       '/auth': 'http://127.0.0.1:8000',
       '/admin': 'http://127.0.0.1:8000',
       '/academics': 'http://127.0.0.1:8000',
-      '/camera': 'http://127.0.0.1:8000',
+      '/camera': {
+        target: 'http://127.0.0.1:8000',
+        ws: true,
+      },
       '/api': 'http://127.0.0.1:8000',
       '/events': {
-        target: 'ws://127.0.0.1:8003',
+        target: 'ws://127.0.0.1:8000',
         ws: true,
       },
       '/ws': {
