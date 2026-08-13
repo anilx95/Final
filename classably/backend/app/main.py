@@ -155,8 +155,10 @@ app.include_router(teacher_dashboard.router)
 app.include_router(events_router)
 
 
-@app.get("/health")
-@app.get("/api/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+@app.api_route("/healthz", methods=["GET", "HEAD"])
+@app.api_route("/ping", methods=["GET", "HEAD"])
 def health_check():
     return {
         "status": "ok",

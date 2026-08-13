@@ -91,10 +91,12 @@ def seed_production_data(db: Session):
         db.flush()
 
         # 3. Academic Year & Subject
+        from datetime import date
+
         ay = AcademicYear(
             year_label="2026-2027",
-            start_date="2026-08-01",
-            end_date="2027-05-31",
+            start_date=date(2026, 8, 1),
+            end_date=date(2027, 5, 31),
             is_current=True,
         )
         db.add(ay)
