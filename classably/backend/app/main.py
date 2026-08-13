@@ -155,10 +155,41 @@ app.include_router(teacher_dashboard.router)
 app.include_router(events_router)
 
 
-@app.get("/")
-def root():
+@app.get("/api/health")
+def health_check():
     return {
         "status": "ok",
         "message": "ClassAbly Platform API Operational",
         "version": "1.0.0",
     }
+
+# Serve static frontend SPA if built dist folder exists
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist"))
+if not os.path.exists(frontend_dist):
+    frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web", "dist"))
+
+if os.path.exists(frontend_dist):
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith(("api/", "admin/", "academics/", "camera/", "events/", "ws/", "events")):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    @app.get("/")
+    def root():
+        return {
+            "status": "ok",
+            "message": "ClassAbly Platform API Operational",
+            "version": "1.0.0",
+        }
