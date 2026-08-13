@@ -88,20 +88,33 @@ def sync_db_schema():
 
     logger = logging.getLogger("app.database")
     try:
+        # First ensure all tables are created
+        Base.metadata.create_all(bind=engine)
+
         inspector = inspect(engine)
         existing_tables = inspector.get_table_names()
+        is_sqlite = engine.dialect.name == "sqlite"
+
         with engine.connect() as conn:
             for table in Base.metadata.sorted_tables:
                 if table.name in existing_tables:
-                    existing_cols = [c["name"] for c in inspector.get_columns(table.name)]
-                    for col in table.columns:
-                        if col.name not in existing_cols:
-                            col_type = col.type.compile(engine.dialect)
-                            sql = f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {col.name} {col_type};"
-                            logger.info(f"Syncing missing column: {table.name}.{col.name}")
-                            conn.execute(text(sql))
+                    try:
+                        existing_cols = [c["name"] for c in inspector.get_columns(table.name)]
+                        for col in table.columns:
+                            if col.name not in existing_cols:
+                                col_type = col.type.compile(engine.dialect)
+                                if is_sqlite:
+                                    sql = f"ALTER TABLE {table.name} ADD COLUMN {col.name} {col_type};"
+                                else:
+                                    sql = f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {col.name} {col_type};"
+                                logger.info(f"Syncing missing column: {table.name}.{col.name}")
+                                try:
+                                    conn.execute(text(sql))
+                                except Exception as col_err:
+                                    logger.warning(f"Column add skipped ({table.name}.{col.name}): {col_err}")
+                    except Exception as table_err:
+                        logger.warning(f"Table inspection skipped ({table.name}): {table_err}")
             conn.commit()
-        Base.metadata.create_all(bind=engine)
 
         # Automatically seed production data if tables are empty
         try:
