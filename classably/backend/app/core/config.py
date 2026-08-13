@@ -19,18 +19,18 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     # Database
     # --------------------------------------------------
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./classably.db"
 
     # --------------------------------------------------
     # Authentication
     # --------------------------------------------------
-    SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    SECRET_KEY: str = "default-production-secret-key-classably-accessibility-2026"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
     # --------------------------------------------------
     # Redis
     # --------------------------------------------------
-    REDIS_URL: str
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # --------------------------------------------------
     # Logging

@@ -155,6 +155,7 @@ app.include_router(teacher_dashboard.router)
 app.include_router(events_router)
 
 
+@app.get("/health")
 @app.get("/api/health")
 def health_check():
     return {
