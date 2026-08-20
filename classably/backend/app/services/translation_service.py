@@ -30,13 +30,22 @@ _FALLBACK_DICTIONARY = {
         "speech to text": "स्पीच टू टेक्स्ट",
         "subtitles": "उपशीर्षक",
         "next topic": "अगला विषय",
+        "today we will learn": "आज हम सीखेंगे",
+        "good morning": "सुप्रभात",
+        "good afternoon": "शुभ दोपहर",
+        "let us begin": "आइए शुरू करते हैं",
+        "any questions": "कोई प्रश्न",
+        "please pay attention": "कृपया ध्यान दें",
         "convolutional layer filters": "कन्वोल्यूशनल लेयर फ़िल्टर",
         "question": "प्रश्न",
+        "doubt": "संदेह",
         "hand raised": "हाथ उठाया",
         "accessibility": "सुगमता",
         "overview of core principles": "मूल सिद्धांतों का अवलोकन",
         "step by step formula derivation": "चरण दर चरण सूत्र व्युत्पत्ति",
         "real world applications": "वास्तविक दुनिया के अनुप्रयोग",
+        "thank you": "धन्यवाद",
+        "class dismissed": "कक्षा समाप्त",
     },
     "te": {
         "hello": "హలో",
@@ -51,13 +60,22 @@ _FALLBACK_DICTIONARY = {
         "speech to text": "స్పీచ్ టు టెక్స్ట్",
         "subtitles": "శీర్షికలు",
         "next topic": "తదుపరి అంశం",
+        "today we will learn": "ఈరోజు మనం నేర్చుకుంటాము",
+        "good morning": "శుభోదయం",
+        "good afternoon": "శుభ మధ్యాహ్నం",
+        "let us begin": "మనం ప్రారంభిద్దాం",
+        "any questions": "ఏవైనా ప్రశ్నలు ఉన్నాయా",
+        "please pay attention": "దయచేసి శ్రద్ధ వహించండి",
         "convolutional layer filters": "కన్వోల్యూషనల్ లేయర్ ఫిల్టర్లు",
         "question": "ప్రశ్న",
+        "doubt": "సందేహం",
         "hand raised": "చెయ్యి పైకెత్తారు",
         "accessibility": "సౌలభ్యం",
         "overview of core principles": "ముఖ్య సూత్రాల అవలోకనం",
         "step by step formula derivation": "దశలవారీ ఫార్ములా ఉత్పాదన",
         "real world applications": "రియల్ వరల్డ్ అప్లికేషన్లు",
+        "thank you": "ధన్యవాదాలు",
+        "class dismissed": "తరగతి పూర్తయింది",
     }
 }
 
@@ -65,7 +83,7 @@ _FALLBACK_DICTIONARY = {
 class TranslationService:
     @staticmethod
     def translate_via_http(text: str, target_code: str) -> str:
-        """Fallback to direct Google Translate free REST API endpoint."""
+        """Direct Google Translate free REST API endpoint with resilient timeout."""
         try:
             encoded_text = urllib.parse.quote(text)
             url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_code}&dt=t&q={encoded_text}"
@@ -73,7 +91,7 @@ class TranslationService:
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             )
-            with urllib.request.urlopen(req, timeout=0.6) as response:
+            with urllib.request.urlopen(req, timeout=2.5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 if payload and len(payload) > 0 and payload[0]:
                     translated_segments = [item[0] for item in payload[0] if item and len(item) > 0 and item[0]]
@@ -81,7 +99,7 @@ class TranslationService:
                     if result:
                         return result
         except Exception as e:
-            logger.warning(f"Direct Google Translate API fallback error: {e}")
+            logger.debug(f"Direct Google Translate API fallback notice: {e}")
         return ""
 
     @staticmethod
@@ -136,7 +154,7 @@ class TranslationService:
             _translation_cache[cache_key] = translated_dict
             return translated_dict
 
-        # Tier 2: Direct HTTP request to Google Translate API with ultra-fast timeout (0.4s)
+        # Tier 2: Direct HTTP request to Google Translate API with 2.5s timeout
         try:
             translated_http = cls.translate_via_http(text_str, target_code)
             if translated_http:
@@ -153,10 +171,25 @@ class TranslationService:
                     _translation_cache[cache_key] = translated.strip()
                     return translated.strip()
             except Exception as e:
-                logger.warning(f"deep-translator skipped for '{text_str[:20]}': {e}")
+                logger.debug(f"deep-translator skipped for '{text_str[:20]}': {e}")
 
         _translation_cache[cache_key] = text_str
         return text_str
+
+    @classmethod
+    def get_all_translations(cls, text: str) -> dict[str, str]:
+        """Pre-compute common translations for real-time WebSocket subtitle payloads."""
+        clean = (text or "").strip()
+        if not clean:
+            return {"en": "", "hi": "", "te": ""}
+        
+        hi_trans = cls.translate(clean, "hi")
+        te_trans = cls.translate(clean, "te")
+        return {
+            "en": clean,
+            "hi": hi_trans,
+            "te": te_trans,
+        }
 
 
 translation_service = TranslationService()

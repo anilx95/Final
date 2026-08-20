@@ -1,6 +1,20 @@
 # ==============================================================================
-# Pro-Level Git Ignore Configuration for ClassAbly
+# Comprehensive .gitignore for ClassAbly Platform
 # ==============================================================================
+
+# --- Secrets & Environment Variables ---
+.env
+.env.*
+*.env
+*.env.local
+*.env.production
+*.env.development
+!.env.example
+secrets.json
+credentials.json
+*.pem
+*.key
+*.cert
 
 # --- Environments & Virtual Envs ---
 .venv/
@@ -8,71 +22,151 @@ venv/
 ENV/
 env/
 pythonenv*/
-*.env
-!.env.example
+.envrc
+.conda/
 
-# --- Python Bytecode & Cache ---
+# --- Python Bytecode, Compilations & Testing Caches ---
 __pycache__/
+*/__pycache__/
+*/**/__pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+*.so
 .pytest_cache/
+*/.pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .mypy_cache/
 .ruff_cache/
-
-# --- Uploads, Media & Recordings ---
-uploads/
-*/uploads/
-uploads/recordings/
-*.webm
-*.mp4
-*.mp3
-*.wav
-*.m4a
-debug_*.jpg
-debug_*.png
-ocr_processed.jpg
-ocr_region.jpg
-
-# --- Databases & Local Storage ---
-*.db
-*.sqlite
-*.sqlite3
-test_*.db
-test_e2e_classably.db
-notes_cache/
+.hypothesis/
 
 # --- Node & Frontend Build Artifacts ---
 node_modules/
+*/node_modules/
+*/**/node_modules/
 dist/
+*/dist/
 build/
+*/build/
 .output/
 .next/
+.nuxt/
 .cache/
+*/.cache/
+.parcel-cache/
+.turbo/
+
+# --- Logs ---
 *.log
+*/logs/
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.system_generated/
 
-# --- Weights, Large Models & Zips ---
+# --- Uploads, User Content, Media & Recordings ---
+uploads/
+*/uploads/
+*/**/uploads/
+recordings/
+*/recordings/
+*/**/recordings/
+notes_cache/
+*/notes_cache/
+*/**/notes_cache/
+
+# Audio / Video Formats
+*.mp4
+*.webm
+*.mkv
+*.avi
+*.mov
+*.flv
+*.wmv
+*.mp3
+*.wav
+*.m4a
+*.ogg
+*.aac
+*.flac
+*.wma
+
+# Large Images & Debug Dumps
+debug_*.jpg
+debug_*.png
+debug_*.jpeg
+ocr_processed.jpg
+ocr_region.jpg
+*.raw
+*.psd
+
+# Generated Documents & Artifacts
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+*.csv
+
+# --- Database & Local Storage Files ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+test_*.db
+test_classably.db
+test_otp_auth.db
+test_ai_general_and_clear.db
+test_e2e_classably.db
+
+# --- Model Weights, Checkpoints & Large Archives ---
 *.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
 *.pt
+*.pth
 *.onnx
 *.bin
-*.pth
+*.h5
+*.tflite
+*.safetensors
+*.ckpt
 yolo11n.pt
 
 # --- Temporary & Scratch Files ---
 scratch/
+*/scratch/
 test_paddle.py
 scratch_20_users.json
+*.tmp
+*.temp
+*~
 
-# --- IDEs, Editors & OS Files ---
+# --- IDEs, Editors & Operating System ---
 .vscode/
+*/.vscode/
 .idea/
+*/.idea/
 *.swp
 *.swo
-*~
+*.swn
+*.sublime-project
+*.sublime-workspace
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+[Dd]esktop.ini

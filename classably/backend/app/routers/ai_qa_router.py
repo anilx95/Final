@@ -45,13 +45,15 @@ def ask_ai_question(
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     if not session_id:
-        active_sess = db.query(LectureSession).order_by(LectureSession.started_at.desc()).first()
-        session_id = active_sess.id if active_sess else 1
+        raise HTTPException(status_code=400, detail="session_id is required to ask a class-specific question.")
 
     # Get lecture session for context
     session = db.get(LectureSession, session_id)
-    subject = session.subject if session else "General"
-    topic = getattr(session, "topic", "Lecture") if session else "Lecture"
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Lecture session {session_id} not found.")
+
+    subject = session.subject or "General"
+    topic = getattr(session, "topic", "Lecture") or "Lecture"
 
     # Get recent transcript as context
     subtitles = (
@@ -128,6 +130,23 @@ def get_qa_history(
         }
         for m in messages
     ]
+
+
+@router.delete("/history/{session_id}")
+@router.post("/clear-history/{session_id}")
+def clear_qa_history(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Clear active AI assistant conversation history for this session."""
+    query = db.query(AIQAMessage).filter(AIQAMessage.session_id == session_id)
+    if current_user.role == "student" and hasattr(current_user, "student") and current_user.student:
+        query = query.filter(AIQAMessage.student_id == current_user.student.id)
+    
+    deleted_count = query.delete(synchronize_session=False)
+    db.commit()
+    return {"success": True, "message": f"Cleared {deleted_count} messages from active session history."}
 
 
 @router.post("/summarize/{session_id}")

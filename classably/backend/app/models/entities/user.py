@@ -23,3 +23,17 @@ class User(Base):
     # Relationships
     student = relationship("Student", back_populates="user", uselist=False, cascade="all, delete-orphan")
     teacher = relationship("Teacher", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+
+class EmailOTP(Base):
+    __tablename__ = "email_otps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), index=True, nullable=False)
+    purpose = Column(String(50), nullable=False)  # "register" or "login"
+    otp_hash = Column(String(255), nullable=False)
+    salt = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    is_consumed = Column(Boolean, default=False, nullable=False)

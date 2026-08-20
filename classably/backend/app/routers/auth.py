@@ -6,6 +6,7 @@ from app.auth.security import hash_password, verify_password
 from app.auth.token import create_access_token
 from app.auth.dependencies import get_current_user
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.audit_constants import AuditAction
 from app.models.entities.user import User
 from app.models.entities.student import Student
@@ -14,6 +15,10 @@ from app.repositories.user_repository import get_user_by_email
 from app.schemas.auth import (
     LoginRequest,
     RegisterRequest,
+    RegisterWithOTPRequest,
+    SendOTPRequest,
+    VerifyOTPRequest,
+    OTPLoginRequest,
     TokenResponse,
     UserOut,
     PasswordResetRequest,
@@ -21,8 +26,186 @@ from app.schemas.auth import (
     ProfileUpdate,
 )
 from app.services.audit_service import AuditLogger
+from app.services.email_otp_service import email_otp_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+@router.post("/otp/send")
+def send_otp(
+    payload: SendOTPRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate and dispatch Gmail OTP for Registration or Login."""
+    email_clean = payload.email.lower().strip()
+    if "@" not in email_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid email address.",
+        )
+
+    purpose = payload.purpose.lower().strip()
+    if purpose not in ["register", "login"]:
+        purpose = "register"
+
+    # For registration: verify email is not already taken
+    existing = get_user_by_email(db, email_clean)
+    if purpose == "register" and existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is already registered. Please sign in instead.",
+        )
+
+    # For login: verify user exists and is active
+    if purpose == "login":
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No account found with this email address. Please register first.",
+            )
+        if not existing.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is disabled. Please contact administrator.",
+            )
+
+    # Check 60s cooldown rate limit
+    allowed, remaining = email_otp_service.check_rate_limit(email_clean, purpose, db=db)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {remaining} seconds before requesting a new OTP.",
+        )
+
+    # Generate OTP code & dispatch email via Gmail SMTP
+    otp_code = email_otp_service.generate_otp(email_clean, purpose, db=db)
+    email_sent = email_otp_service.send_otp_email(email_clean, otp_code, purpose)
+
+    response_data = {
+        "success": True,
+        "message": f"Verification code sent to {email_clean}. Please check your inbox.",
+        "email": email_clean,
+        "cooldown_seconds": 60,
+        "email_dispatched": email_sent,
+    }
+    if settings.DEBUG or settings.MOCK_EMAIL_IN_DEV:
+        response_data["debug_otp"] = otp_code
+
+    return response_data
+
+
+@router.post("/otp/verify")
+def verify_otp(
+    payload: VerifyOTPRequest,
+    db: Session = Depends(get_db),
+):
+    """Verify OTP without consuming it immediately."""
+    email_clean = payload.email.lower().strip()
+    is_valid, msg = email_otp_service.verify_otp(
+        email=email_clean,
+        otp_code=payload.otp,
+        purpose=payload.purpose,
+        consume=False,
+        db=db,
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        )
+    return {"success": True, "message": "OTP verified successfully."}
+
+
+@router.post("/register-with-otp", response_model=TokenResponse)
+def register_with_otp(
+    request: RegisterWithOTPRequest,
+    db: Session = Depends(get_db),
+):
+    """Verify Gmail OTP and create account atomically."""
+    email_clean = request.email.lower().strip()
+
+    # 1. Strictly verify and consume OTP
+    is_valid, err_msg = email_otp_service.verify_otp(
+        email=email_clean,
+        otp_code=request.otp,
+        purpose="register",
+        consume=True,
+        db=db,
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=err_msg,
+        )
+
+    # 2. Proceed with registration
+    return register(request=request, db=db)
+
+
+@router.post("/login-with-otp", response_model=TokenResponse)
+def login_with_otp(
+    http_request: Request,
+    payload: OTPLoginRequest,
+    db: Session = Depends(get_db),
+):
+    """Log in using verified Gmail OTP."""
+    email_clean = payload.email.lower().strip()
+
+    # 1. Strictly verify and consume OTP
+    is_valid, err_msg = email_otp_service.verify_otp(
+        email=email_clean,
+        otp_code=payload.otp,
+        purpose="login",
+        consume=True,
+        db=db,
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=err_msg,
+        )
+
+    # 2. Find user
+    user = get_user_by_email(db, email_clean)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found. Please register first.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is disabled. Please contact administrator.",
+        )
+
+    token = create_access_token(
+        data={
+            "sub": user.email,
+            "role": user.role,
+            "id": user.id,
+            "full_name": user.full_name,
+        }
+    )
+
+    try:
+        AuditLogger.log(
+            db=db,
+            user_id=user.id,
+            action=AuditAction.LOGIN,
+            module="auth",
+            ip_address=http_request.client.host if http_request.client else None,
+            user_agent=http_request.headers.get("user-agent"),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": UserOut.model_validate(user),
+    }
 
 
 @router.post("/register", response_model=TokenResponse)

@@ -4,6 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,6 +26,13 @@ api.interceptors.request.use(
 export const authApi = {
   login: (data: any) => api.post('/api/auth/login', data),
   register: (data: any) => api.post('/api/auth/register', data),
+  sendOtp: (email: string, purpose: 'register' | 'login' = 'register') =>
+    api.post('/api/auth/otp/send', { email, purpose }),
+  verifyOtp: (email: string, otp: string, purpose: 'register' | 'login' = 'register') =>
+    api.post('/api/auth/otp/verify', { email, otp, purpose }),
+  registerWithOtp: (data: any) => api.post('/api/auth/register-with-otp', data),
+  loginWithOtp: (email: string, otp: string) =>
+    api.post('/api/auth/login-with-otp', { email, otp }),
   getMe: () => api.get('/api/auth/me'),
   updateProfile: (data: any) => api.put('/api/auth/profile', data),
   forgotPassword: (data: any) => api.post('/api/auth/forgot-password', data),
@@ -116,6 +124,8 @@ export const aiQaApi = {
     api.post('/api/ai-qa/ask', data),
   getQAHistory: (sessionId: number) =>
     api.get(`/api/ai-qa/history/${sessionId}`),
+  clearQAHistory: (sessionId: number) =>
+    api.delete(`/api/ai-qa/history/${sessionId}`),
   summarizeLecture: (sessionId: number, style: string = 'detailed') =>
     api.post(`/api/ai-qa/summarize/${sessionId}`, { style }),
   getSummary: (sessionId: number) =>

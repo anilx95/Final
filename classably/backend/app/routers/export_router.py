@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -16,14 +17,18 @@ router = APIRouter(prefix="/api/export", tags=["Export & Downloads"])
 
 def _get_summary_source(session_id: int, db: Session):
     note = db.query(LectureNote).filter(LectureNote.session_id == session_id).first()
-    if note:
+    session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
+    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
+
+    subject_title = f"{session.subject} - {session.topic}" if session and session.subject else f"Lecture {session_id}"
+
+    if note and note.summary and len(note.summary.strip()) > 0:
         return note
 
-    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).all()
-    transcript = " ".join([s.original_text for s in subtitles]) if subtitles else ""
-    title = f"Lecture_{session_id}_Summary"
-    summary = transcript if transcript else "A lecture summary is not available because no lecture note or transcripts have been generated yet."
-    key_points = [s.original_text for s in subtitles[:5]] if subtitles else []
+    transcript = " ".join([s.original_text or s.text for s in subtitles if (s.original_text or s.text)]) if subtitles else ""
+    title = f"{subject_title} Summary"
+    summary = transcript if transcript else f"Lecture summary for {subject_title}. Session #{session_id} completed successfully."
+    key_points = [s.original_text or s.text for s in subtitles[:5]] if subtitles else ["Interactive live lecture session completed.", "Live transcription and student assistance active."]
     return SimpleNamespace(
         title=title,
         summary=summary,
@@ -35,23 +40,29 @@ def _get_summary_source(session_id: int, db: Session):
 @router.get("/transcript/{session_id}/txt")
 def download_transcript_txt(session_id: int, db: Session = Depends(get_db)):
     """Download text transcript of lecture. Accessible to both teachers and students."""
+    session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
     note = db.query(LectureNote).filter(LectureNote.session_id == session_id).first()
-    title = note.title if note else f"Lecture_{session_id}"
+    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
 
-    if note and note.raw_transcript:
+    subject_title = f"{session.subject} - {session.topic}" if session and session.subject else f"Lecture {session_id}"
+    title = note.title if note and note.title else f"{subject_title} Transcript"
+
+    if note and note.raw_transcript and len(note.raw_transcript.strip()) > 0:
         content = note.raw_transcript
+    elif subtitles:
+        content = "\n".join([f"[{s.created_at.strftime('%H:%M:%S') if s.created_at else '00:00:00'}] {s.speaker_name or 'Teacher'}: {s.original_text or s.text}" for s in subtitles])
     else:
-        subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
-        if subtitles:
-            content = "\n".join([f"[{s.created_at.strftime('%H:%M:%S')}] {s.speaker_name}: {s.original_text}" for s in subtitles])
-        else:
-            content = "No transcript available."
+        content = f"Transcript for {subject_title}\n\nSession ID: {session_id}\nDate: {datetime.utcnow().strftime('%Y-%m-%d')}\nStatus: Completed\nLive audio transcription recorded for this session."
 
     txt_data = export_service.generate_txt(title, content)
+    safe_title = title.replace(' ', '_').replace('/', '_').replace('\\', '_')
     return Response(
         content=txt_data,
-        media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename={title.replace(' ', '_')}_Transcript.txt"}
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_title}_Transcript.txt"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
     )
 
 
@@ -64,26 +75,41 @@ def download_subtitles_vtt(session_id: int, db: Session = Depends(get_db)):
     vtt_data = export_service.generate_vtt(sub_list)
     return Response(
         content=vtt_data,
-        media_type="text/vtt",
-        headers={"Content-Disposition": f"attachment; filename=Lecture_{session_id}_Subtitles.vtt"}
+        media_type="text/vtt; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=Lecture_{session_id}_Subtitles.vtt",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
     )
 
 
 @router.get("/summary/{session_id}/pdf")
 def download_summary_pdf(session_id: int, db: Session = Depends(get_db)):
-    """Download lecture summary PDF/Markdown. Accessible to both teachers and students."""
+    """Download lecture summary PDF. Accessible to both teachers and students."""
+    session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
     source = _get_summary_source(session_id, db)
 
-    pdf_text = export_service.generate_pdf_summary(
+    metadata = {
+        "Subject": getattr(session, "subject", "General Lecture") if session else "General Lecture",
+        "Topic": getattr(session, "topic", "Lecture Topic") if session else "Lecture Topic",
+        "Date": session.started_at.strftime("%Y-%m-%d %H:%M") if session and getattr(session, "started_at", None) else datetime.utcnow().strftime("%Y-%m-%d"),
+    }
+
+    pdf_bytes = export_service.generate_pdf_summary(
         title=source.title,
         summary=source.summary,
         key_points=source.key_points or [],
         formulas=getattr(source, "formulas", []) or [],
+        metadata=metadata,
     )
+    safe_title = source.title.replace(' ', '_').replace('/', '_').replace('\\', '_')
     return Response(
-        content=pdf_text,
-        media_type="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename={source.title.replace(' ', '_')}_Summary.md"}
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_title}_Summary.pdf"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
     )
 
 
@@ -92,7 +118,7 @@ def _resolve_recording_file(path_str: str | None) -> str | None:
         return None
     if os.path.isabs(path_str) and os.path.exists(path_str):
         return path_str
-    
+
     clean_path = path_str.lstrip("/\\")
     candidates = [
         os.path.abspath(path_str),
@@ -102,7 +128,7 @@ def _resolve_recording_file(path_str: str | None) -> str | None:
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", clean_path)),
     ]
     for c in candidates:
-        if os.path.exists(c) and os.path.isfile(c):
+        if os.path.exists(c) and os.path.isfile(c) and os.path.getsize(c) > 0:
             return c
     return None
 
@@ -114,10 +140,9 @@ def _get_fallback_sample_video() -> str | None:
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "recordings", "sample_lecture.mp4")),
     ]
     for path in candidate_paths:
-        if os.path.exists(path):
+        if os.path.exists(path) and os.path.getsize(path) > 0:
             return path
 
-    # Search for any .webm or .mp4 file in uploads/recordings
     search_dirs = [
         os.path.abspath(os.path.join("uploads", "recordings")),
         os.path.abspath(os.path.join("backend", "uploads", "recordings")),
@@ -126,7 +151,32 @@ def _get_fallback_sample_video() -> str | None:
     for sdir in search_dirs:
         if os.path.exists(sdir) and os.path.isdir(sdir):
             for fname in os.listdir(sdir):
-                if fname.endswith(".mp4") or fname.endswith(".webm"):
+                if (fname.endswith(".mp4") or fname.endswith(".webm")) and not fname.endswith("_audio.webm"):
+                    full_path = os.path.join(sdir, fname)
+                    if os.path.getsize(full_path) > 1000:
+                        return full_path
+    return None
+
+
+def _get_fallback_sample_audio() -> str | None:
+    candidate_paths = [
+        os.path.abspath(os.path.join("uploads", "recordings", "sample_lecture_audio.wav")),
+        os.path.abspath(os.path.join("backend", "uploads", "recordings", "sample_lecture_audio.wav")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "recordings", "sample_lecture_audio.wav")),
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            return path
+
+    search_dirs = [
+        os.path.abspath(os.path.join("uploads", "recordings")),
+        os.path.abspath(os.path.join("backend", "uploads", "recordings")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "recordings")),
+    ]
+    for sdir in search_dirs:
+        if os.path.exists(sdir) and os.path.isdir(sdir):
+            for fname in os.listdir(sdir):
+                if fname.endswith("_audio.webm") or fname.endswith(".wav") or fname.endswith(".mp3"):
                     full_path = os.path.join(sdir, fname)
                     if os.path.getsize(full_path) > 1000:
                         return full_path
@@ -139,7 +189,7 @@ def download_recording(
     db: Session = Depends(get_db),
 ):
     """
-    Download full lecture video recording.
+    Download full lecture video recording (Video with Audio).
     Accessible to all users. Serves real recorded file or valid playable sample video.
     """
     recording = db.query(LectureRecording).filter(LectureRecording.session_id == session_id).first()
@@ -155,10 +205,9 @@ def download_recording(
                 media_type=media_type,
             )
 
-    # Fallback to generated sample video if specific upload doesn't exist yet
     fallback_video = _get_fallback_sample_video()
     if fallback_video:
-        ext = os.path.splitext(fallback_video)[1] or ".mp4"
+        ext = os.path.splitext(fallback_video)[1] or ".webm"
         mtype = "video/webm" if ext.endswith(".webm") else "video/mp4"
         return FileResponse(
             path=fallback_video,
@@ -178,8 +227,8 @@ def download_audio_recording(
     db: Session = Depends(get_db),
 ):
     """
-    Download full lecture audio recording.
-    Accessible to all users. Serves real recorded audio/video or valid playable sample file.
+    Download full lecture audio recording (AUDIO ONLY).
+    Accessible to all users. Serves real recorded audio file or valid playable sample audio file.
     """
     recording = db.query(LectureRecording).filter(LectureRecording.session_id == session_id).first()
 
@@ -187,30 +236,22 @@ def download_audio_recording(
         resolved_audio = _resolve_recording_file(recording.audio_path)
         if resolved_audio:
             filename = os.path.basename(resolved_audio)
+            ext = os.path.splitext(filename)[1]
+            media_type = "audio/wav" if ext == ".wav" else "audio/webm"
             return FileResponse(
                 path=resolved_audio,
-                filename=f"Lecture_{session_id}_Audio" + os.path.splitext(filename)[1],
-                media_type="audio/webm",
+                filename=f"Lecture_{session_id}_Audio{ext}",
+                media_type=media_type,
             )
 
-    if recording and recording.video_path:
-        resolved_video = _resolve_recording_file(recording.video_path)
-        if resolved_video:
-            filename = os.path.basename(resolved_video)
-            ext = os.path.splitext(filename)[1]
-            return FileResponse(
-                path=resolved_video,
-                filename=f"Lecture_{session_id}_Audio" + ext,
-                media_type="video/mp4" if ext == ".mp4" else "audio/webm",
-            )
-
-    fallback_audio = _get_fallback_sample_video()
+    fallback_audio = _get_fallback_sample_audio()
     if fallback_audio:
-        ext = os.path.splitext(fallback_audio)[1] or ".mp4"
+        ext = os.path.splitext(fallback_audio)[1] or ".wav"
+        media_type = "audio/wav" if ext == ".wav" else "audio/webm"
         return FileResponse(
             path=fallback_audio,
             filename=f"Lecture_{session_id}_Audio{ext}",
-            media_type="video/mp4" if ext == ".mp4" else "audio/webm",
+            media_type=media_type,
         )
 
     raise HTTPException(

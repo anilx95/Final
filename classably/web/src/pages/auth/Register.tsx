@@ -1,16 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Lock, Mail, User as UserIcon, Phone, GraduationCap, School, Shield, ArrowRight, Building2 } from 'lucide-react';
+import {
+  Lock,
+  Mail,
+  User as UserIcon,
+  Phone,
+  GraduationCap,
+  School,
+  Shield,
+  ArrowRight,
+  Building2,
+  Sparkles,
+  Clock,
+  CheckCircle2,
+  ShieldCheck,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { UserRole } from '../../types';
+import { authApi } from '../../api/client';
 
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Full name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string().email('Please enter a valid Gmail / email address'),
+  otp: z.string().min(6, '6-digit OTP is required for verification'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   role: z.enum(['student', 'teacher']),
   college_name: z.string().min(2, 'College / Institution Name is mandatory.'),
@@ -23,10 +38,14 @@ const registerSchema = z.object({
 type RegisterFormInputs = z.infer<typeof registerSchema>;
 
 export const Register: React.FC = () => {
-  const { register: registerAuth } = useAuth();
+  const { registerWithOtp } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   const {
     register,
@@ -39,11 +58,22 @@ export const Register: React.FC = () => {
     defaultValues: {
       role: 'student',
       disability_profiles: [],
+      otp: '',
     },
   });
 
   const selectedRole = watch('role');
+  const watchedEmail = watch('email');
   const selectedDisabilities = watch('disability_profiles') || [];
+
+  // OTP Countdown timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleDisabilityToggle = (profile: string) => {
     if (selectedDisabilities.includes(profile)) {
@@ -53,14 +83,55 @@ export const Register: React.FC = () => {
     }
   };
 
+  const handleSendRegistrationOtp = async () => {
+    const cleanEmail = (watchedEmail || '').trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      addToast({
+        type: 'warning',
+        title: 'Invalid Email',
+        description: 'Please enter a valid Gmail / email address first.',
+      });
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const res = await authApi.sendOtp(cleanEmail, 'register');
+      setOtpSent(true);
+      setCooldown(res.data.cooldown_seconds || 60);
+      addToast({
+        type: 'success',
+        title: 'Verification Code Sent',
+        description: `A 6-digit OTP code has been dispatched to ${cleanEmail}. Please check your inbox.`,
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Failed to Send OTP',
+        description: err.response?.data?.detail || 'Could not send verification code. Please try again.',
+      });
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
   const onSubmit = async (data: RegisterFormInputs) => {
+    if (!otpSent || !data.otp || data.otp.trim().length < 6) {
+      addToast({
+        type: 'warning',
+        title: 'Email Verification Required',
+        description: 'Please click "Send OTP" to receive and enter the 6-digit verification code.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const role = await registerAuth(data);
+      const role = await registerWithOtp(data);
       addToast({
         type: 'success',
         title: 'Account Registered Successfully',
-        description: `Welcome to ClassAbly! Account created as ${role.toUpperCase()}.`,
+        description: `Welcome to ClassAbly! Account created and verified as ${role.toUpperCase()}.`,
       });
 
       if (role === 'admin') navigate('/admin');
@@ -119,6 +190,7 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
+            {/* Name and Email with OTP Button */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">Full Name</label>
@@ -135,36 +207,92 @@ export const Register: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Email Address</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-                  <input
-                    type="email"
-                    placeholder="jane@university.edu"
-                    {...register('email')}
-                    className="input-field pl-10"
-                  />
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Gmail / Email Address</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                    <input
+                      type="email"
+                      placeholder="jane@gmail.com"
+                      {...register('email')}
+                      className="input-field pl-10"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSendRegistrationOtp}
+                    disabled={isSendingOtp || cooldown > 0 || !watchedEmail}
+                    title="Send verification code to this Gmail address"
+                    className="px-3 py-2 rounded-xl bg-sky-600/20 border border-sky-500/40 text-sky-300 hover:bg-sky-600/30 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center gap-1.5 transition-all"
+                  >
+                    {isSendingOtp ? (
+                      <div className="w-3.5 h-3.5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+                    ) : cooldown > 0 ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{cooldown}s</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{otpSent ? 'Resend' : 'Send OTP'}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
                 {errors.email && <p className="text-xs text-rose-400 mt-1">{errors.email.message}</p>}
               </div>
             </div>
 
+            {/* 6-Digit OTP Verification Field */}
             <div>
-              <label className="block text-xs font-semibold text-sky-300 mb-1.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-sky-400" />
+                  Gmail Verification OTP <span className="text-rose-400 font-bold">*Required</span>
+                </label>
+                {otpSent && (
+                  <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Code sent to email
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <Shield className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="Enter 6-digit code received on Gmail"
+                  {...register('otp')}
+                  className="input-field pl-10 font-mono tracking-wider font-bold text-sky-300"
+                />
+              </div>
+              {errors.otp && <p className="text-xs text-rose-400 mt-1">{errors.otp.message}</p>}
+              {!otpSent && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Click <strong>"Send OTP"</strong> above to receive your verification code.
+                </p>
+              )}
+            </div>
+
+            {/* College / Institution Name */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 College / University Name <span className="text-rose-400 font-bold">*Mandatory</span>
               </label>
               <div className="relative">
-                <Building2 className="w-4 h-4 text-sky-400 absolute left-3.5 top-3" />
+                <Building2 className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                 <input
                   type="text"
                   placeholder="e.g. Stanford University / MIT College of Engineering"
                   {...register('college_name')}
-                  className="input-field pl-10 border-sky-500/40"
+                  className="input-field pl-10"
                 />
               </div>
               {errors.college_name && <p className="text-xs text-rose-400 mt-1">{errors.college_name.message}</p>}
             </div>
 
+            {/* Password and Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">Password</label>
@@ -257,7 +385,7 @@ export const Register: React.FC = () => {
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  Register & Sign In <ArrowRight className="w-4 h-4" />
+                  Verify OTP & Create Account <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
@@ -267,7 +395,7 @@ export const Register: React.FC = () => {
             <p className="text-xs text-slate-400">
               Already registered?{' '}
               <Link to="/login" className="text-sky-400 font-semibold hover:underline">
-                Sign In Instead
+                Sign In (Password or Gmail OTP)
               </Link>
             </p>
           </div>

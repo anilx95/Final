@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Video, VideoOff, HelpCircle, Volume2, VolumeX, Globe, Sparkles, Download, CheckCircle2,
   RefreshCw, Mic, MessageSquare, Send, BookOpen, X, ChevronDown, ChevronUp,
-  Loader2, FileText, Brain, Hand, School, Radio, UserCheck, Clock, Shield
+  Loader2, FileText, Brain, Hand, School, Radio, UserCheck, Clock, Shield, Trash2
 } from 'lucide-react';
 import { lectureApi, exportApi, aiQaApi, adminApi, academicsApi } from '../../api/client';
 import { LiveSubtitle, AIQAMessage, AILectureSummary, User, TimetableItem } from '../../types';
@@ -69,7 +69,12 @@ export const StudentLiveLecture: React.FC = () => {
   const [isAudioMuted, setIsAudioMuted] = useState(true);
   const [audioVolume, setAudioVolume] = useState<number>(1.0);
   const [connectionState, setConnectionState] = useState<string>('connecting');
-  const [autoReadSubtitles, setAutoReadSubtitles] = useState<boolean>(true);
+  const [autoReadSubtitles, setAutoReadSubtitles] = useState<boolean>(false);
+  const [isKicked, setIsKicked] = useState(false);
+  const isKickedRef = useRef(false);
+  const [isTeacherAway, setIsTeacherAway] = useState(false);
+  const [activeSubtitleText, setActiveSubtitleText] = useState<string | null>(null);
+  const subtitleClearTimerRef = useRef<any>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -86,6 +91,35 @@ export const StudentLiveLecture: React.FC = () => {
   const peerIdRef = useRef<string>(
     `student_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
   );
+  const chatScrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const lastRawEnglishSubtitleRef = useRef<string>('');
+
+  // Ensure student page always loads positioned at the exact TOP of the page
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, []);
+
+  const handleLanguageChange = (newLang: string) => {
+    setTargetLang(newLang);
+    targetLangRef.current = newLang;
+    
+    // Instantly update active speaking subtitle directly in target language without showing English
+    if (lastRawEnglishSubtitleRef.current) {
+      const translated = newLang === 'en' 
+        ? lastRawEnglishSubtitleRef.current 
+        : translateClientText(lastRawEnglishSubtitleRef.current, newLang);
+      setActiveSubtitleText(translated);
+    }
+    
+    // Update transcript log entries
+    setSubtitles((prev) => prev.map((s) => ({
+      ...s,
+      text: newLang === 'en' 
+        ? (s.original_text || s.text) 
+        : translateClientText(s.original_text || s.text, newLang),
+    })));
+  };
 
   useEffect(() => {
     if (subtitleContainerRef.current) {
@@ -93,10 +127,10 @@ export const StudentLiveLecture: React.FC = () => {
     }
   }, [subtitles]);
 
-  // Auto-scroll AI chat
+  // Auto-scroll ONLY internal AI chat container (never scrolls the window)
   useEffect(() => {
-    if (aiChatEndRef.current) {
-      aiChatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (chatScrollContainerRef.current) {
+      chatScrollContainerRef.current.scrollTop = chatScrollContainerRef.current.scrollHeight;
     }
   }, [aiMessages]);
 
@@ -117,13 +151,17 @@ export const StudentLiveLecture: React.FC = () => {
     const videoTracks = stream.getVideoTracks();
 
     if (videoRef.current && videoTracks.length > 0) {
-      videoRef.current.srcObject = stream;
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
       videoRef.current.muted = true;
       videoRef.current.play().catch(() => {});
     }
 
     if (audioRef.current && audioTracks.length > 0) {
-      audioRef.current.srcObject = stream;
+      if (audioRef.current.srcObject !== stream) {
+        audioRef.current.srcObject = stream;
+      }
       audioRef.current.muted = true;
       audioRef.current.play().catch(() => {});
     }
@@ -168,7 +206,7 @@ export const StudentLiveLecture: React.FC = () => {
 
   // ─── WebRTC Signaling ────────────────────────────────────────────────────
   const initWebRTC = useCallback(() => {
-    if (!isMountedRef.current) return;
+    if (!isMountedRef.current || isKickedRef.current) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/events/${classroomId}`;
@@ -184,24 +222,21 @@ export const StudentLiveLecture: React.FC = () => {
     };
 
     ws.onopen = () => {
+      if (isKickedRef.current) {
+        ws.close();
+        return;
+      }
       setConnectionState('connected');
       ws.send(JSON.stringify({
-        type: 'join', role: 'student', classroom_id: classroomId, peer_id: peerIdRef.current,
+        type: 'join', role: 'student', classroom_id: classroomId, peer_id: peerIdRef.current, student_id: studentId,
       }));
-      setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'request_offer', classroom_id: classroomId, peer_id: peerIdRef.current,
-          }));
-        }
-      }, 500);
     };
 
     ws.onclose = () => {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && !isKickedRef.current) {
         setConnectionState('reconnecting');
         reconnectTimerRef.current = setTimeout(() => {
-          if (isMountedRef.current) initWebRTC();
+          if (isMountedRef.current && !isKickedRef.current) initWebRTC();
         }, 3000);
       }
     };
@@ -213,19 +248,31 @@ export const StudentLiveLecture: React.FC = () => {
       try {
         const message = JSON.parse(event.data);
 
-        // Handle kick message
-        if (message.type === 'student_kicked' && message.peer_id === peerIdRef.current) {
-          addToast({
-            type: 'error',
-            title: 'Removed from Session',
-            description: message.message || 'You have been removed from this lecture by the teacher.',
-          });
-          if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-          if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-          setConnectionState('disconnected');
-          setHasVideo(false);
-          setHasAudio(false);
-          return;
+        // Handle kick message in real time
+        if (message.type === 'student_kicked') {
+          const isTargeted = message.student_id === studentId ||
+                             message.student_id === user?.id ||
+                             message.peer_id === peerIdRef.current;
+
+          if (isTargeted) {
+            isKickedRef.current = true;
+            setIsKicked(true);
+            addToast({
+              type: 'error',
+              title: 'Removed from Session',
+              description: message.message || 'You have been removed from this live lecture session by the teacher.',
+            });
+            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+            if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+            setSessionStatus('OFFLINE');
+            setConnectionState('failed');
+            setHasVideo(false);
+            setHasAudio(false);
+            setSubtitles([]);
+            return;
+          }
         }
 
         // Handle session ended or teacher offline events
@@ -234,6 +281,7 @@ export const StudentLiveLecture: React.FC = () => {
           setConnectionState('disconnected');
           setHasVideo(false);
           setHasAudio(false);
+          setSubtitles([]);
           if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
           addToast({
             type: 'info',
@@ -243,52 +291,78 @@ export const StudentLiveLecture: React.FC = () => {
           return;
         }
 
-        if (message.type === 'teacher_offline') {
-          setSessionStatus('OFFLINE');
+        if (message.type === 'teacher_away') {
+          setIsTeacherAway(true);
           setConnectionState('disconnected');
-          setHasVideo(false);
-          setHasAudio(false);
+          return;
+        }
+
+        if (message.type === 'teacher_offline') {
+          setIsTeacherAway(true);
+          setConnectionState('disconnected');
           if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
           return;
         }
 
         if (message.type === 'teacher_online') {
-          setTimeout(() => {
+          setIsTeacherAway(false);
+          setConnectionState('connecting');
+          if (!isKickedRef.current) {
+            // Instantly request fresh offer from returning teacher with 0ms delay
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({
-                type: 'request_offer', classroom_id: classroomId, peer_id: peerIdRef.current,
+                type: 'request_offer', classroom_id: classroomId, peer_id: peerIdRef.current, student_id: studentId,
               }));
             }
-          }, 300);
+          }
           return;
         }
 
         if (message.type === 'subtitle' && message.subtitle) {
           const sub = message.subtitle;
           const currentLang = targetLangRef.current;
-          let displayText = sub.text || sub.original_text;
+          const rawText = sub.original_text || sub.text || '';
+          lastRawEnglishSubtitleRef.current = rawText;
+
+          let displayText = rawText;
           if (currentLang && currentLang !== 'en') {
             if (sub.translations && sub.translations[currentLang]) {
               displayText = sub.translations[currentLang];
             } else if (sub.translated_text && sub.language === currentLang) {
               displayText = sub.translated_text;
             } else {
-              displayText = translateClientText(sub.original_text || sub.text, currentLang);
+              displayText = translateClientText(rawText, currentLang);
             }
           }
-          const newSub: LiveSubtitle = {
-            id: sub.id || Date.now(),
-            speaker: sub.speaker || 'Teacher',
-            text: displayText,
-            original_text: sub.original_text || sub.text,
-            translated_text: sub.translated_text,
-            translations: sub.translations,
-            timestamp: sub.timestamp || new Date().toLocaleTimeString(),
-          };
-          setSubtitles((prev) => {
-            if (prev.some((s) => s.id === newSub.id)) return prev;
-            return [...prev, newSub];
-          });
+
+          // 1. Instantly update live Netflix subtitle overlay directly in target language without showing English
+          setActiveSubtitleText(displayText);
+          if (subtitleClearTimerRef.current) {
+            clearTimeout(subtitleClearTimerRef.current);
+          }
+          subtitleClearTimerRef.current = setTimeout(() => {
+            setActiveSubtitleText(null);
+          }, 2500);
+
+          const isInterim = Boolean(message.is_interim);
+          const subId = sub.id || Date.now();
+
+          // 2. Add finalized sentences to the permanent transcript log
+          if (!isInterim) {
+            const newSub: LiveSubtitle = {
+              id: subId,
+              speaker: sub.speaker || 'Teacher',
+              text: displayText,
+              original_text: rawText,
+              translated_text: displayText,
+              translations: sub.translations,
+              timestamp: sub.timestamp || new Date().toLocaleTimeString(),
+            };
+            setSubtitles((prev) => {
+              const cleanPrev = prev.filter((s) => s.id !== subId);
+              return [...cleanPrev, newSub];
+            });
+          }
           return;
         }
 
@@ -311,6 +385,15 @@ export const StudentLiveLecture: React.FC = () => {
           let attachTimer: ReturnType<typeof setTimeout> | null = null;
 
           pc.ontrack = (trackEvent) => {
+            console.log('[Student] Remote track received:', trackEvent.track.kind, trackEvent.track.id);
+            setIsTeacherAway(false);
+            trackEvent.track.onunmute = () => {
+              console.log('[Student] Remote track unmuted:', trackEvent.track.kind);
+              setIsTeacherAway(false);
+              if (trackEvent.track.kind === 'video') setHasVideo(true);
+              if (trackEvent.track.kind === 'audio') setHasAudio(true);
+            };
+
             let stream: MediaStream;
             if (trackEvent.streams && trackEvent.streams[0]) {
               stream = trackEvent.streams[0];
@@ -339,7 +422,13 @@ export const StudentLiveLecture: React.FC = () => {
             }
           };
 
-          pc.onconnectionstatechange = () => setConnectionState(pc.connectionState);
+          pc.onconnectionstatechange = () => {
+            setConnectionState(pc.connectionState);
+            if (pc.connectionState === 'connected') {
+              setIsTeacherAway(false);
+              setHasVideo(true);
+            }
+          };
 
           pc.oniceconnectionstatechange = () => {
             if (pc.iceConnectionState === 'failed') pc.restartIce();
@@ -376,20 +465,23 @@ export const StudentLiveLecture: React.FC = () => {
 
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     pollIntervalRef.current = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN && !isKickedRef.current) {
         const state = pcRef.current?.connectionState;
-        if (!state || state === 'failed' || state === 'disconnected' || state === 'new') {
+        if (!state || state === 'failed' || state === 'closed' || state === 'disconnected') {
           ws.send(JSON.stringify({
-            type: 'request_offer', classroom_id: classroomId, peer_id: peerIdRef.current,
+            type: 'request_offer', classroom_id: classroomId, peer_id: peerIdRef.current, student_id: studentId,
           }));
         }
       }
-    }, 8000);
-  }, [classroomId, attachStreamToElements, addToast]);
+    }, 15000);
+  }, [classroomId, attachStreamToElements, addToast, studentId]);
 
   // ─── Session Discovery & Multi-Classroom Stream Fetching ─────────────────
   useEffect(() => {
+    if (isKickedRef.current) return;
+
     const fetchActiveSessions = async () => {
+      if (isKickedRef.current) return;
       try {
         const [allActiveRes, teacherRes, ttRes] = await Promise.allSettled([
           lectureApi.getAllActiveSessions(),
@@ -446,11 +538,28 @@ export const StudentLiveLecture: React.FC = () => {
 
   // ─── Register connection ─────────────────────────────────────────────────
   useEffect(() => {
-    if (sessionId) {
-      lectureApi.connectStudent({ session_id: sessionId, peer_id: peerIdRef.current }).catch(() => {});
+    if (sessionId && !isKickedRef.current) {
+      lectureApi.connectStudent({ session_id: sessionId, peer_id: peerIdRef.current }).catch((err) => {
+        if (err.response?.status === 403) {
+          isKickedRef.current = true;
+          setIsKicked(true);
+          setSessionStatus('OFFLINE');
+          setConnectionState('failed');
+          setHasVideo(false);
+          setHasAudio(false);
+          setSubtitles([]);
+          if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+          if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+          addToast({
+            type: 'error',
+            title: 'Access Denied',
+            description: 'You were removed from this lecture session and cannot rejoin.',
+          });
+        }
+      });
     }
     return () => {
-      if (sessionId) {
+      if (sessionId && !isKickedRef.current) {
         lectureApi.disconnectStudent({ session_id: sessionId }).catch(() => {});
       }
     };
@@ -497,16 +606,28 @@ export const StudentLiveLecture: React.FC = () => {
       } catch {}
     };
     fetchSubs();
-    const interval = setInterval(fetchSubs, 400);
+    const interval = setInterval(fetchSubs, 3000);
     return () => clearInterval(interval);
   }, [sessionId, sessionStatus, targetLang, teacherName]);
 
-  // ─── Load AI Q&A history ──────────────────────────────────────────────────
+  // ─── Load AI Q&A history strictly per active session ─────────────────────
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      setAiMessages([]);
+      setSummaryData(null);
+      setShowSummary(false);
+      return;
+    }
+    // Clean slate for new session: immediately clear old session's messages
+    setAiMessages([]);
+    setSummaryData(null);
+    setShowSummary(false);
+
     aiQaApi.getQAHistory(sessionId).then((res) => {
       setAiMessages(res.data || []);
-    }).catch(() => {});
+    }).catch(() => {
+      setAiMessages([]);
+    });
   }, [sessionId]);
 
   // ─── AI Q&A ───────────────────────────────────────────────────────────────
@@ -537,6 +658,28 @@ export const StudentLiveLecture: React.FC = () => {
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  // ─── Clear AI Q&A History ──────────────────────────────────────────────────
+  const handleClearHistory = async () => {
+    const confirmed = window.confirm(
+      'Clear chat history? This will remove your current AI conversation.'
+    );
+    if (!confirmed) return;
+
+    if (sessionId) {
+      try {
+        await aiQaApi.clearQAHistory(sessionId);
+      } catch (e) {
+        console.debug('Backend clear history notice:', e);
+      }
+    }
+    setAiMessages([]);
+    addToast({
+      type: 'info',
+      title: 'Chat History Cleared',
+      description: 'Your current AI assistant conversation has been removed.',
+    });
   };
 
   // ─── Summarize ────────────────────────────────────────────────────────────
@@ -596,83 +739,67 @@ export const StudentLiveLecture: React.FC = () => {
   const subtitleSizeClass = subtitleSize === 'sm' ? 'text-xs' : subtitleSize === 'lg' ? 'text-lg' : 'text-sm sm:text-base';
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${sessionStatus === 'ACTIVE' ? 'bg-emerald-500 animate-ping' : sessionStatus === 'ENDED' ? 'bg-purple-500' : 'bg-rose-500'}`} />
-            <h1 className="text-xl font-extrabold text-slate-100">Live Classroom Viewer</h1>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-              sessionStatus === 'ACTIVE'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : sessionStatus === 'ENDED'
-                ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
-                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-            }`}>
-              {sessionStatus === 'ACTIVE'
-                ? (sessionId ? `SESSION #${sessionId} • LIVE` : 'LIVE')
-                : sessionStatus === 'ENDED'
-                ? 'CLASS ENDED'
-                : 'TEACHER OFFLINE'}
+    <div className="space-y-4 animate-fade-in">
+      {/* Compact Top Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 px-4 rounded-xl">
+        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+          <span className={`w-2.5 h-2.5 rounded-full ${sessionStatus === 'ACTIVE' ? 'bg-emerald-500 animate-ping' : sessionStatus === 'ENDED' ? 'bg-purple-500' : 'bg-rose-500'}`} />
+          <h1 className="text-base sm:text-lg font-black text-slate-100 truncate">Live Classroom</h1>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+            sessionStatus === 'ACTIVE'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+              : sessionStatus === 'ENDED'
+              ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+              : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+          }`}>
+            {sessionStatus === 'ACTIVE'
+              ? (sessionId ? `SESSION #${sessionId} • LIVE` : 'LIVE')
+              : sessionStatus === 'ENDED'
+              ? 'CLASS ENDED'
+              : 'TEACHER OFFLINE'}
+          </span>
+          {sessionStatus === 'ACTIVE' && sessionSubject && (
+            <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30 truncate">
+              {sessionSubject} {sessionTopic ? `— ${sessionTopic}` : ''}
             </span>
-          </div>
-          {sessionStatus === 'ACTIVE' && (
-            <div className="mt-2 text-xs text-slate-300 flex items-center gap-2 flex-wrap animate-fade-in">
-              {teacherName && teacherName !== 'Teacher' && teacherName !== 'Educator' && (
-                <span className="text-slate-400 font-semibold flex items-center gap-1">
-                  <School className="w-3.5 h-3.5 text-emerald-400" /> Educator: <strong className="text-emerald-400">{teacherName}</strong>
-                </span>
-              )}
-              {sessionSubject && (
-                <span className="font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded border border-sky-500/30">
-                  Subject: {sessionSubject}
-                </span>
-              )}
-              {sessionTopic && (
-                <span className="font-bold text-purple-300 bg-purple-500/10 px-2.5 py-0.5 rounded border border-purple-500/30">
-                  Topic: {sessionTopic}
-                </span>
-              )}
-            </div>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${connBadge.color}`}>
             {connBadge.label}
           </span>
 
           {/* Audio Control */}
-          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
             <button
               onClick={toggleAudioMute}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold transition-all cursor-pointer ${
                 !isAudioMuted
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
                   : 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
               }`}
             >
               {!isAudioMuted ? (
-                <><Volume2 className="w-4 h-4 text-emerald-400 animate-pulse" /><span>Audio ON</span></>
+                <><Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /><span>ON</span></>
               ) : (
-                <><VolumeX className="w-4 h-4 text-rose-400" /><span>MUTED</span></>
+                <><VolumeX className="w-3.5 h-3.5 text-rose-400" /><span>MUTED</span></>
               )}
             </button>
             <input
               type="range" min="0" max="1" step="0.05"
               value={isAudioMuted ? 0 : audioVolume}
               onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-              className="w-16 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+              className="w-14 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-slate-400" />
+          <div className="flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-slate-400" />
             <select
               value={targetLang}
-              onChange={(e) => setTargetLang(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none"
+              onChange={(e) => handleLanguageChange(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none"
             >
               <option value="en">English</option>
               <option value="hi">Hindi (हिन्दी)</option>
@@ -686,15 +813,15 @@ export const StudentLiveLecture: React.FC = () => {
         {/* Left 2 Cols: Video & Transcript */}
         <div className="lg:col-span-2 space-y-6">
           <div
-            className="card p-0 overflow-hidden relative bg-black h-80 sm:h-96 flex items-center justify-center"
+            className="card p-0 overflow-hidden relative bg-black h-80 sm:h-[440px] lg:h-[490px] flex items-center justify-center rounded-2xl border border-slate-800 shadow-2xl"
             onClick={() => isAudioMuted && hasAudio && handleUnmute()}
           >
             <video
               ref={videoRef} autoPlay playsInline muted={isAudioMuted}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${hasVideo && sessionStatus === 'ACTIVE' ? 'opacity-100 relative z-10' : 'opacity-0 absolute inset-0 pointer-events-none'}`}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${hasVideo && sessionStatus === 'ACTIVE' && !isTeacherAway ? 'opacity-100 relative z-10' : 'opacity-0 absolute inset-0 pointer-events-none'}`}
             />
 
-            {isAudioMuted && sessionStatus === 'ACTIVE' && (
+            {isAudioMuted && sessionStatus === 'ACTIVE' && !isKicked && !isTeacherAway && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleUnmute(); }}
                 className="absolute top-4 right-4 z-30 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4 py-2 rounded-xl flex items-center gap-2 shadow-xl animate-pulse text-xs cursor-pointer pointer-events-auto"
@@ -703,7 +830,22 @@ export const StudentLiveLecture: React.FC = () => {
               </button>
             )}
 
-            {sessionStatus === 'ENDED' || sessionStatus === 'OFFLINE' ? (
+            {isKicked ? (
+              <div className="text-center space-y-4 z-10 p-6 max-w-md bg-slate-950/95 border border-rose-500/50 rounded-2xl shadow-2xl backdrop-blur-md animate-fade-in">
+                <div className="w-16 h-16 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 mx-auto shadow-lg shadow-rose-500/10">
+                  <Shield className="w-8 h-8 text-rose-400" />
+                </div>
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/30 shadow-sm">
+                    Access Revoked
+                  </span>
+                  <h3 className="text-xl font-black text-slate-100 mt-3 tracking-wide">Removed From Class</h3>
+                  <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                    You have been removed from this live lecture session by the teacher. You cannot rejoin this active session.
+                  </p>
+                </div>
+              </div>
+            ) : sessionStatus === 'ENDED' || sessionStatus === 'OFFLINE' ? (
               <div className="text-center space-y-4 z-10 p-6 max-w-md bg-slate-950/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-md">
                 <div className="w-16 h-16 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mx-auto shadow-lg shadow-purple-500/10">
                   <VideoOff className="w-8 h-8 text-purple-400" />
@@ -734,6 +876,38 @@ export const StudentLiveLecture: React.FC = () => {
                   >
                     <Sparkles className="w-4 h-4" /> Ask AI Question
                   </button>
+                </div>
+              </div>
+            ) : isTeacherAway && sessionStatus === 'ACTIVE' ? (
+              /* Blurred Placeholder when Teacher Temporarily Steps Away */
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-slate-950/85 backdrop-blur-xl border border-amber-500/30 text-center animate-fade-in">
+                <div className="relative mb-3">
+                  <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-400/40 flex items-center justify-center text-amber-300 shadow-xl shadow-amber-500/20">
+                    <Radio className="w-8 h-8 animate-pulse text-amber-400" />
+                  </div>
+                  <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-amber-500 border-2 border-slate-950 flex items-center justify-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping" />
+                  </span>
+                </div>
+
+                <div className="max-w-md space-y-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Educator Stepped Away Temporarily</span>
+                  </div>
+
+                  <h3 className="text-base font-black text-slate-100 tracking-wide">
+                    Live Lecture in Progress
+                  </h3>
+
+                  <p className="text-xs text-slate-300 leading-relaxed max-w-sm">
+                    The teacher is temporarily on another screen. Live class is active and video stream will resume automatically upon return.
+                  </p>
+
+                  <div className="pt-1 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Subtitles & AI doubts active</span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -796,14 +970,12 @@ export const StudentLiveLecture: React.FC = () => {
               </div>
             )}
 
-            {/* YouTube Style CC Subtitle Overlay */}
-            {sessionStatus === 'ACTIVE' && isCcEnabled && (
-              <div className={`absolute ${subtitlePosition === 'bottom' ? 'bottom-4' : 'top-14'} left-1/2 -translate-x-1/2 z-30 max-w-[92%] w-auto pointer-events-none transition-all duration-300`}>
-                <div className="bg-black/85 backdrop-blur-sm px-5 py-2.5 rounded-lg shadow-2xl transition-all duration-300">
-                  <p className={`text-white font-semibold ${subtitleSizeClass} text-center leading-relaxed tracking-wide`}>
-                    {subtitles.length > 0
-                      ? (subtitles[subtitles.length - 1].text || subtitles[subtitles.length - 1].original_text)
-                      : 'Listening for live audio...'}
+            {/* Netflix Style CC Subtitle Overlay — Centered near bottom, comfortably above edge */}
+            {sessionStatus === 'ACTIVE' && isCcEnabled && activeSubtitleText && (
+              <div className="absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none transition-all duration-150 animate-fade-in">
+                <div className="bg-black/80 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-white/15 shadow-2xl flex items-center justify-center text-center transition-all duration-150">
+                  <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} text-center leading-snug tracking-wide drop-shadow-md`}>
+                    {activeSubtitleText}
                   </p>
                 </div>
               </div>
@@ -886,51 +1058,92 @@ export const StudentLiveLecture: React.FC = () => {
 
         {/* Right 1 Col: AI Chat, Raise Hand, Downloads */}
         <div className="space-y-6">
-          {/* AI Q&A Chat Panel */}
-          <div className="card space-y-3 border-sky-500/20">
+          {/* ChatGPT-Style AI Q&A Chat Panel */}
+          <div className="card space-y-3 border-sky-500/20 shadow-xl bg-slate-900/90">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-sky-400" /> Ask AI Assistant
-              </h3>
-              <button
-                onClick={() => setShowAiChat(!showAiChat)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                {showAiChat ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
+                  <Brain className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-sm flex items-center gap-1.5">
+                    AI Classroom Assistant
+                  </h3>
+                  <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    ChatGPT-Style Live Doubt Solver
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {aiMessages.length > 0 && (
+                  <button
+                    onClick={handleClearHistory}
+                    title="Clear chat history"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-lg transition-all"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Clear History</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowAiChat(!showAiChat)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  {showAiChat ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {showAiChat && (
               <>
-                {/* Chat Messages */}
-                <div className="space-y-3 max-h-64 overflow-y-auto px-1">
+                {/* Chat Messages Container */}
+                <div ref={chatScrollContainerRef} className="space-y-3.5 max-h-72 overflow-y-auto px-1 pr-1.5">
                   {aiMessages.length === 0 ? (
                     <div className="text-center py-6 space-y-2">
-                      <Brain className="w-8 h-8 text-sky-500/40 mx-auto" />
-                      <p className="text-xs text-slate-400 font-semibold">Ask any question — academic or general knowledge!</p>
-                      <p className="text-[10px] text-slate-500">AI delivers accurate, reasonable, highly detailed answers for any question.</p>
+                      <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 mx-auto">
+                        <MessageSquare className="w-5 h-5" />
+                      </div>
+                      <p className="text-xs text-slate-300 font-semibold">How can I help you in this class?</p>
+                      <p className="text-[11px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                        Ask about lecture concepts, formulas, derivations, or step-by-step problem solving.
+                      </p>
                     </div>
                   ) : (
                     aiMessages.map((msg) => (
-                      <div key={msg.id} className="space-y-2">
-                        {/* Student question */}
-                        <div className="flex justify-end">
-                          <div className="max-w-[85%] bg-sky-600/20 border border-sky-500/30 rounded-2xl rounded-tr-sm px-3 py-2 text-xs text-sky-100">
+                      <div key={msg.id} className="space-y-2 animate-fade-in">
+                        {/* Student question — Right aligned */}
+                        <div className="flex justify-end items-start gap-2">
+                          <div className="max-w-[85%] bg-sky-600 text-white rounded-2xl rounded-tr-sm px-3.5 py-2 text-xs shadow-md">
                             {msg.question}
                           </div>
                         </div>
-                        {/* AI answer */}
+
+                        {/* AI answer — Left aligned ChatGPT style */}
                         {msg.answer ? (
-                          <div className="flex justify-start">
-                            <div className="max-w-[85%] bg-slate-800/80 border border-slate-700 rounded-2xl rounded-tl-sm px-3 py-2 text-xs text-slate-200">
-                              <span className="text-[10px] font-bold text-purple-400 block mb-1">🤖 AI Assistant</span>
-                              <div className="whitespace-pre-wrap leading-relaxed">{msg.answer}</div>
+                          <div className="flex justify-start items-start gap-2">
+                            <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-indigo-500 to-sky-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0 mt-0.5 shadow-sm">
+                              AI
+                            </div>
+                            <div className="max-w-[88%] bg-slate-800/90 border border-slate-700/80 rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs text-slate-200 shadow-lg space-y-1">
+                              <div className="text-[10px] font-extrabold text-sky-400 uppercase tracking-wider">
+                                ClassAbly AI
+                              </div>
+                              <div className="whitespace-pre-wrap leading-relaxed">
+                                {msg.answer}
+                              </div>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex justify-start">
-                            <div className="bg-slate-800/80 border border-slate-700 rounded-2xl rounded-tl-sm px-3 py-2">
-                              <Loader2 className="w-4 h-4 text-sky-400 animate-spin" />
+                          <div className="flex justify-start items-center gap-2">
+                            <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-indigo-500 to-sky-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm">
+                              AI
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-sky-300 font-medium py-1.5 px-3 bg-slate-800/80 border border-slate-700 rounded-2xl">
+                              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse delay-75" />
+                              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse delay-150" />
+                              <span className="ml-1 text-[11px] text-slate-400">AI Assistant is thinking...</span>
                             </div>
                           </div>
                         )}
@@ -940,22 +1153,41 @@ export const StudentLiveLecture: React.FC = () => {
                   <div ref={aiChatEndRef} />
                 </div>
 
+                {/* Quick Suggestion Chips */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-800/60">
+                  {[
+                    '💡 Key Concept',
+                    '📝 Step-by-Step Derivation',
+                    '🎯 Core Formula',
+                    '❓ Example Problem',
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setAiQuestion(chip.replace(/^[^\w]+/, '').trim())}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700 transition-all cursor-pointer"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
                 {/* AI Input */}
-                <div className="flex gap-2">
+                <div className="flex gap-2 pt-1">
                   <input
                     ref={aiInputRef}
                     type="text"
-                    placeholder="Ask AI to solve questions or explain doubts..."
+                    placeholder="Message AI Assistant..."
                     value={aiQuestion}
                     onChange={(e) => setAiQuestion(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
-                    className="input-field text-xs flex-1"
+                    className="input-field text-xs flex-1 rounded-xl bg-slate-950 border-slate-800 focus:border-sky-500"
                     disabled={isAiLoading}
                   />
                   <button
                     onClick={handleAskAI}
                     disabled={!aiQuestion.trim() || isAiLoading}
-                    className="btn-primary text-xs px-3"
+                    className="btn-primary text-xs px-3.5 rounded-xl flex items-center justify-center"
                   >
                     {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </button>
@@ -1033,26 +1265,32 @@ export const StudentLiveLecture: React.FC = () => {
               <Download className="w-4 h-4 text-sky-400" /> Lecture Downloads & Recordings
             </h3>
 
-            <a href={exportApi.downloadTranscriptUrl(sessionId || 1)} download className="btn-secondary w-full text-xs justify-between">
-              <span>Transcript (TXT)</span>
-              <Download className="w-3.5 h-3.5 text-slate-400" />
-            </a>
-            <a href={exportApi.downloadSubtitlesUrl(sessionId || 1)} download className="btn-secondary w-full text-xs justify-between">
-              <span>Subtitles (VTT)</span>
-              <Download className="w-3.5 h-3.5 text-slate-400" />
-            </a>
-            <a href={exportApi.downloadSummaryUrl(sessionId || 1)} download className="btn-secondary w-full text-xs justify-between text-purple-400 border-purple-500/30">
-              <span>PDF Summary</span>
-              <Download className="w-3.5 h-3.5" />
-            </a>
-            <a href={exportApi.downloadAudioUrl(sessionId || 1)} download className="btn-secondary w-full text-xs justify-between text-emerald-400 border-emerald-500/30">
-              <span>Audio Recording (MP3)</span>
-              <Download className="w-3.5 h-3.5" />
-            </a>
-            <a href={exportApi.downloadRecordingUrl(sessionId || 1)} download className="btn-secondary w-full text-xs justify-between text-sky-400 border-sky-500/30">
-              <span>Video Recording (MP4)</span>
-              <Download className="w-3.5 h-3.5" />
-            </a>
+            {sessionId ? (
+              <div className="space-y-2">
+                <a href={exportApi.downloadTranscriptUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between">
+                  <span>Transcript (TXT)</span>
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                </a>
+                <a href={exportApi.downloadSubtitlesUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between">
+                  <span>Subtitles (VTT)</span>
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                </a>
+                <a href={exportApi.downloadSummaryUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between text-purple-400 border-purple-500/30">
+                  <span>PDF Summary</span>
+                  <Download className="w-3.5 h-3.5" />
+                </a>
+                <a href={exportApi.downloadAudioUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between text-emerald-400 border-emerald-500/30">
+                  <span>Audio Recording (WEBM/MP3)</span>
+                  <Download className="w-3.5 h-3.5" />
+                </a>
+                <a href={exportApi.downloadRecordingUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between text-sky-400 border-sky-500/30">
+                  <span>Video Recording (WEBM/MP4)</span>
+                  <Download className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 py-3 text-center">No active class session recordings available.</p>
+            )}
           </div>
         </div>
       </div>

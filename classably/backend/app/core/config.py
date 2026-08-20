@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     # --------------------------------------------------
     GEMINI_API_KEY: str = ""
 
+    # --------------------------------------------------
+    # Email / Gmail SMTP & OTP
+    # --------------------------------------------------
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "ClassAbly"
+    OTP_EXPIRE_MINUTES: int = 5
+    OTP_COOLDOWN_SECONDS: int = 60
+    MOCK_EMAIL_IN_DEV: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

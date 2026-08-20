@@ -16,9 +16,29 @@ class RegisterRequest(BaseModel):
     disability_profiles: Optional[List[str]] = []
 
 
+class RegisterWithOTPRequest(RegisterRequest):
+    otp: str
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class SendOTPRequest(BaseModel):
+    email: str
+    purpose: str = "register"  # "register" or "login"
+
+
+class VerifyOTPRequest(BaseModel):
+    email: str
+    otp: str
+    purpose: str = "register"
+
+
+class OTPLoginRequest(BaseModel):
+    email: str
+    otp: str
 
 
 class UserOut(BaseModel):

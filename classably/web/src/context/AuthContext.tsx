@@ -7,7 +7,9 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<UserRole>;
+  loginWithOtp: (email: string, otp: string) => Promise<UserRole>;
   register: (data: any) => Promise<UserRole>;
+  registerWithOtp: (data: any) => Promise<UserRole>;
   logout: () => void;
   updateUser: (updatedData: Partial<User>) => void;
 }
@@ -19,28 +21,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(localStorage.getItem('classably_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Auto-login check on boot
+  // Auto-login check on boot with fast safety fallback
   useEffect(() => {
+    let isMounted = true;
+
+    // Fast safety fallback: prevent any mobile/network freeze over 1.5s
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) setIsLoading(false);
+    }, 1500);
+
     const fetchUser = async () => {
       const storedToken = localStorage.getItem('classably_token');
       if (!storedToken) {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
+        clearTimeout(safetyTimeout);
         return;
       }
       try {
         const response = await authApi.getMe();
-        setUser(response.data);
+        if (isMounted) setUser(response.data);
       } catch (err) {
         console.error('Auto-login failed, clearing session:', err);
         localStorage.removeItem('classably_token');
-        setToken(null);
-        setUser(null);
+        if (isMounted) {
+          setToken(null);
+          setUser(null);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
+        clearTimeout(safetyTimeout);
       }
     };
 
     fetchUser();
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<UserRole> => {
@@ -59,10 +76,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithOtp = async (email: string, otp: string): Promise<UserRole> => {
+    setIsLoading(true);
+    try {
+      const response = await authApi.loginWithOtp(email, otp);
+      const { access_token, user: loggedUser } = response.data;
+
+      localStorage.setItem('classably_token', access_token);
+      setToken(access_token);
+      setUser(loggedUser);
+
+      return loggedUser.role as UserRole;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const register = async (data: any): Promise<UserRole> => {
     setIsLoading(true);
     try {
       const response = await authApi.register(data);
+      const { access_token, user: registeredUser } = response.data;
+
+      localStorage.setItem('classably_token', access_token);
+      setToken(access_token);
+      setUser(registeredUser);
+
+      return registeredUser.role as UserRole;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const registerWithOtp = async (data: any): Promise<UserRole> => {
+    setIsLoading(true);
+    try {
+      const response = await authApi.registerWithOtp(data);
       const { access_token, user: registeredUser } = response.data;
 
       localStorage.setItem('classably_token', access_token);
@@ -92,7 +141,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         login,
+        loginWithOtp,
         register,
+        registerWithOtp,
         logout,
         updateUser,
       }}

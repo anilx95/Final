@@ -24,12 +24,19 @@ import { LiveSubtitle, RaiseHandItem, QuizQuestion } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 
+// Module-level persistent recording storage across component unmount/remount
+const globalRecordedVideoChunks: Map<number, Blob[]> = new Map();
+const globalRecordedAudioChunks: Map<number, Blob[]> = new Map();
+const globalSessionStartTimes: Map<number, number> = new Map();
+
 export const LectureStudio: React.FC = () => {
   const { addToast } = useToast();
   const { user } = useAuth();
 
   // Lecture Session State
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const sessionIdRef = useRef<number | null>(null);
+  const [lastCompletedSessionId, setLastCompletedSessionId] = useState<number | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
@@ -68,13 +75,21 @@ export const LectureStudio: React.FC = () => {
   // Web Speech API & MediaRecorder State
   const [isSttActive, setIsSttActive] = useState(false);
   const [isSttSupported, setIsSttSupported] = useState(true);
+  const [activeSubtitleText, setActiveSubtitleText] = useState<string | null>(null);
+  const subtitleClearTimerRef = useRef<any>(null);
+  const lastNegotiationTimeRef = useRef<Map<string, number>>(new Map());
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<any>(null);
   const subtitleContainerRef = useRef<HTMLDivElement | null>(null);
   const isSessionActiveRef = useRef(false);
+
+  // Keep sessionIdRef in sync with state
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   // Auto-scroll subtitles to bottom when new subtitles arrive
   useEffect(() => {
@@ -82,6 +97,20 @@ export const LectureStudio: React.FC = () => {
       subtitleContainerRef.current.scrollTop = subtitleContainerRef.current.scrollHeight;
     }
   }, [subtitles]);
+
+  const pendingSubtitlesQueueRef = useRef<any[]>([]);
+
+  const broadcastSubtitle = (subPayload: any) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(subPayload));
+    } else {
+      // Ensure initial words spoken during startup are not dropped while WebSocket connects
+      pendingSubtitlesQueueRef.current.push(subPayload);
+      if (pendingSubtitlesQueueRef.current.length > 25) {
+        pendingSubtitlesQueueRef.current.shift();
+      }
+    }
+  };
 
   const startSpeechRecognition = (activeSessionId: number) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -94,117 +123,212 @@ export const LectureStudio: React.FC = () => {
     setIsSttSupported(true);
     try {
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (e) {}
+        try { recognitionRef.current.abort(); } catch (e) {}
+        recognitionRef.current = null;
       }
 
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
-        console.log('[STT] Live speech recognition started.');
+        console.log('[STT] Live speech recognition started instantly.');
         setIsSttActive(true);
       };
 
       recognition.onresult = (event: any) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          const transcriptText = result[0].transcript.trim();
+          const transcriptText = result[0]?.transcript?.trim() || '';
           if (!transcriptText) continue;
 
           if (result.isFinal) {
-            console.log('[STT] Instant speech transcript final:', transcriptText);
-            const subPayload = {
-              type: 'subtitle',
-              classroom_id: 1,
-              session_id: activeSessionId,
-              subtitle: {
-                id: Date.now(),
+            finalTranscript += (finalTranscript ? ' ' : '') + transcriptText;
+          } else {
+            interimTranscript += (interimTranscript ? ' ' : '') + transcriptText;
+          }
+        }
+
+        const activeText = finalTranscript || interimTranscript;
+        const isFinal = Boolean(finalTranscript);
+
+        if (activeText) {
+          const subId = isFinal ? Date.now() : 999999999;
+
+          // 1. Instant UI update with 0ms delay (disappears after silence)
+          setActiveSubtitleText(activeText);
+          if (subtitleClearTimerRef.current) {
+            clearTimeout(subtitleClearTimerRef.current);
+          }
+          subtitleClearTimerRef.current = setTimeout(() => {
+            setActiveSubtitleText(null);
+          }, 2500);
+
+          // 2. Broadcast immediately to students with zero buffering
+          const subPayload = {
+            type: 'subtitle',
+            classroom_id: 1,
+            session_id: activeSessionId || sessionIdRef.current,
+            is_interim: !isFinal,
+            subtitle: {
+              id: subId,
+              speaker: user?.full_name || 'Educator',
+              text: activeText,
+              original_text: activeText,
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          };
+          broadcastSubtitle(subPayload);
+
+          if (isFinal) {
+            setSubtitles((prev) => {
+              const withoutInterim = prev.filter((s) => s.id !== 999999999);
+              return [...withoutInterim, {
+                id: subId,
                 speaker: user?.full_name || 'Educator',
-                text: transcriptText,
-                original_text: transcriptText,
+                text: activeText,
+                original_text: activeText,
                 timestamp: new Date().toLocaleTimeString(),
-              },
-            };
+              }];
+            });
 
-            // Instant 0ms WebSocket broadcast to all connected students
-            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify(subPayload));
-            }
-
-            // Ingest to backend database asynchronously without blocking UI
+            // Ingest to backend database asynchronously
             lectureApi.ingestSubtitle({
-              session_id: activeSessionId,
-              text: transcriptText,
+              session_id: activeSessionId || sessionIdRef.current || 0,
+              text: finalTranscript,
               speaker_name: user?.full_name || 'Educator',
               target_lang: targetLang,
-            }).catch((e) => console.error('[STT] Background ingest error:', e));
+            }).catch((e) => console.debug('[STT] Background ingest error:', e));
           }
         }
       };
 
       recognition.onerror = (event: any) => {
-        console.warn('[STT] Speech recognition error:', event.error);
-        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        console.warn('[STT] Speech recognition notice:', event.error);
+        if (event.error === 'not-allowed') {
           setIsSttActive(false);
         }
       };
 
       recognition.onend = () => {
-        console.log('[STT] Speech recognition ended.');
-        if (isSessionActiveRef.current) {
-          try { recognition.start(); } catch (e) {}
+        // Continuous speech recognition recovery with minimal delay
+        if (isSessionActiveRef.current && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {
+            setTimeout(() => {
+              if (isSessionActiveRef.current && recognitionRef.current) {
+                try { recognitionRef.current.start(); } catch (err) {}
+              }
+            }, 20);
+          }
         } else {
           setIsSttActive(false);
         }
       };
 
-      recognition.start();
       recognitionRef.current = recognition;
+      try {
+        recognition.start();
+      } catch (startErr) {
+        console.warn('[STT] Recognition immediate start notice:', startErr);
+      }
     } catch (err) {
-      console.error('[STT] Error starting speech recognition:', err);
+      console.warn('[STT] Could not initialize SpeechRecognition:', err);
     }
   };
 
   const stopSpeechRecognition = () => {
+    if (subtitleClearTimerRef.current) {
+      clearTimeout(subtitleClearTimerRef.current);
+      subtitleClearTimerRef.current = null;
+    }
+    setActiveSubtitleText(null);
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
+      try { recognitionRef.current.abort(); } catch (e) {}
       recognitionRef.current = null;
     }
     setIsSttActive(false);
   };
 
-  const startRecording = (stream: MediaStream) => {
+  const startRecording = (stream: MediaStream, targetSessionId: number) => {
     try {
-      recordedChunksRef.current = [];
-      let options: MediaRecorderOptions = { mimeType: 'video/webm;codecs=vp9,opus' };
-      let mediaRecorder: MediaRecorder;
+      if (!globalRecordedVideoChunks.has(targetSessionId)) {
+        globalRecordedVideoChunks.set(targetSessionId, []);
+      }
+      if (!globalRecordedAudioChunks.has(targetSessionId)) {
+        globalRecordedAudioChunks.set(targetSessionId, []);
+      }
+      if (!globalSessionStartTimes.has(targetSessionId)) {
+        globalSessionStartTimes.set(targetSessionId, Date.now());
+      }
+
+      const videoChunkStore = globalRecordedVideoChunks.get(targetSessionId)!;
+      const audioChunkStore = globalRecordedAudioChunks.get(targetSessionId)!;
+
+      // 1. Full Video + Audio Recorder
+      let videoRecorder: MediaRecorder;
       try {
-        mediaRecorder = new MediaRecorder(stream, options);
+        videoRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
       } catch (e1) {
         try {
-          options = { mimeType: 'video/webm' };
-          mediaRecorder = new MediaRecorder(stream, options);
+          videoRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
         } catch (e2) {
-          mediaRecorder = new MediaRecorder(stream);
+          videoRecorder = new MediaRecorder(stream);
         }
       }
 
-      mediaRecorder.ondataavailable = (event) => {
+      videoRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
+          videoChunkStore.push(event.data);
         }
       };
 
-      mediaRecorder.start(1000);
-      mediaRecorderRef.current = mediaRecorder;
+      videoRecorder.start(1000);
+      mediaRecorderRef.current = videoRecorder;
 
-      setRecordingSeconds(0);
+      // 2. Dedicated Audio-Only Recorder
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const audioOnlyStream = new MediaStream(audioTracks);
+        let audioRecorder: MediaRecorder;
+        try {
+          audioRecorder = new MediaRecorder(audioOnlyStream, { mimeType: 'audio/webm;codecs=opus' });
+        } catch (ea1) {
+          try {
+            audioRecorder = new MediaRecorder(audioOnlyStream, { mimeType: 'audio/webm' });
+          } catch (ea2) {
+            audioRecorder = new MediaRecorder(audioOnlyStream);
+          }
+        }
+
+        audioRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunkStore.push(event.data);
+          }
+        };
+
+        audioRecorder.start(1000);
+        audioRecorderRef.current = audioRecorder;
+      }
+
+      // 3. Continuous Recording Timer
+      const startTime = globalSessionStartTimes.get(targetSessionId) || Date.now();
+      const initialElapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+      setRecordingSeconds(initialElapsed);
+
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = setInterval(() => {
-        setRecordingSeconds((prev) => prev + 1);
+        const currentElapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+        setRecordingSeconds(currentElapsed);
       }, 1000);
+
+      console.log(`[Teacher Recording] Recording active for session #${targetSessionId}, starting at ${initialElapsed}s.`);
     } catch (err) {
       console.warn('[Teacher] Could not start MediaRecorder:', err);
     }
@@ -216,43 +340,60 @@ export const LectureStudio: React.FC = () => {
       recordingTimerRef.current = null;
     }
 
-    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch {}
+      mediaRecorderRef.current = null;
+    }
+    if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+      try { audioRecorderRef.current.stop(); } catch {}
+      audioRecorderRef.current = null;
+    }
 
-    return new Promise<void>((resolve) => {
-      if (!mediaRecorderRef.current) return resolve();
+    // Wait 300ms for final ondataavailable chunk events to flush
+    await new Promise((r) => setTimeout(r, 300));
 
-      mediaRecorderRef.current.onstop = async () => {
-        try {
-          const videoBlob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          console.log(`[Teacher] Recorded blob size: ${videoBlob.size} bytes`);
-          if (videoBlob.size > 0) {
-            const formData = new FormData();
-            formData.append('video', videoBlob, `lecture_${activeSessionId}.webm`);
-            formData.append('audio', videoBlob, `lecture_${activeSessionId}_audio.webm`);
-            formData.append('duration', recordingSeconds.toString());
+    try {
+      const videoChunks = globalRecordedVideoChunks.get(activeSessionId) || [];
+      const audioChunks = globalRecordedAudioChunks.get(activeSessionId) || [];
 
-            addToast({
-              type: 'info',
-              title: 'Uploading Recording...',
-              description: 'Saving video & audio recording to server.',
-            });
-            await lectureApi.uploadRecording(activeSessionId, formData);
-            addToast({
-              type: 'success',
-              title: 'Recording Saved',
-              description: 'Video and Audio recordings are ready for download.',
-            });
-          }
-        } catch (e) {
-          console.error('[Teacher] Failed to upload recording:', e);
-        } finally {
-          recordedChunksRef.current = [];
-          resolve();
+      const videoBlob = new Blob(videoChunks, { type: 'video/webm' });
+      // Audio-only blob: if audio chunks exist use them; otherwise use videoBlob as fallback
+      const audioBlob = audioChunks.length > 0
+        ? new Blob(audioChunks, { type: 'audio/webm' })
+        : new Blob(videoChunks, { type: 'audio/webm' });
+
+      console.log(`[Teacher Upload] Session #${activeSessionId} Video Size: ${videoBlob.size} bytes, Audio Size: ${audioBlob.size} bytes`);
+
+      if (videoBlob.size > 0 || audioBlob.size > 0) {
+        const formData = new FormData();
+        if (videoBlob.size > 0) {
+          formData.append('video', videoBlob, `lecture_${activeSessionId}.webm`);
         }
-      };
+        if (audioBlob.size > 0) {
+          formData.append('audio', audioBlob, `lecture_${activeSessionId}_audio.webm`);
+        }
+        const totalDuration = recordingSeconds || Math.max(1, Math.floor((Date.now() - (globalSessionStartTimes.get(activeSessionId) || Date.now())) / 1000));
+        formData.append('duration', totalDuration.toString());
 
-      mediaRecorderRef.current.stop();
-    });
+        addToast({
+          type: 'info',
+          title: 'Uploading Recording...',
+          description: 'Saving video & audio recording to server.',
+        });
+        await lectureApi.uploadRecording(activeSessionId, formData);
+        addToast({
+          type: 'success',
+          title: 'Recording Saved',
+          description: 'Video and Audio recordings are ready for download.',
+        });
+      }
+    } catch (e) {
+      console.error('[Teacher] Failed to upload recording:', e);
+    } finally {
+      globalRecordedVideoChunks.delete(activeSessionId);
+      globalRecordedAudioChunks.delete(activeSessionId);
+      globalSessionStartTimes.delete(activeSessionId);
+    }
   };
 
   const rtcConfig: RTCConfiguration = {
@@ -394,9 +535,17 @@ export const LectureStudio: React.FC = () => {
     ws.onopen = () => {
       console.log('[Teacher] Signaling WebSocket connected');
       // Notify all connected students that teacher is online
-      // Include peer_id='teacher' so the backend can route answers back to us
       ws.send(JSON.stringify({ type: 'teacher_online', classroom_id: 1, role: 'teacher', peer_id: 'teacher' }));
       console.log('[Teacher] teacher_online broadcast sent');
+
+      // Immediately flush any speech subtitles captured during session startup
+      while (pendingSubtitlesQueueRef.current.length > 0) {
+        const queuedPayload = pendingSubtitlesQueueRef.current.shift();
+        try {
+          ws.send(JSON.stringify(queuedPayload));
+          console.log('[Teacher] Flushed initial startup subtitle:', queuedPayload.subtitle?.text);
+        } catch (e) {}
+      }
     };
 
     ws.onmessage = async (event) => {
@@ -405,6 +554,14 @@ export const LectureStudio: React.FC = () => {
         const peerId = message.peer_id || message.student_id || 'default_student';
 
         if (message.type === 'join' || message.type === 'request_offer') {
+          const now = Date.now();
+          const lastTime = lastNegotiationTimeRef.current.get(peerId) || 0;
+          const existingPc = peerConnectionsRef.current.get(peerId);
+          if (existingPc && (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting') && (now - lastTime < 3000)) {
+            console.log('[Teacher] Skipping redundant offer negotiation for active peer:', peerId);
+            return;
+          }
+          lastNegotiationTimeRef.current.set(peerId, now);
           console.log('[Teacher] Student joined room, creating new offer for peer:', peerId);
           await createPeerConnectionForStudent(peerId, stream);
         } else if (message.type === 'answer' && message.sdp) {
@@ -661,33 +818,43 @@ export const LectureStudio: React.FC = () => {
     }
   };
 
-  // Initialize Web Cam Media Stream
-  const startMediaDevices = async () => {
+  // Initialize Web Cam Media Stream with resilient mobile/desktop fallback chain
+  const startMediaDevices = async (activeSessionId?: number) => {
     try {
-      console.log('[Teacher] Requesting getUserMedia with video & enhanced audio constraints...');
-      let rawStream: MediaStream;
-      try {
-        rawStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: true
-          }
-        });
-      } catch (e1) {
-        console.warn('[Teacher] Enhanced audio constraints failed, trying basic video+audio:', e1);
+      const currentSessionId = activeSessionId || sessionIdRef.current || 1;
+      console.log('[Teacher] Requesting getUserMedia with video & enhanced audio constraints for session:', currentSessionId);
+      let rawStream: MediaStream | null = null;
+      
+      const constraintsList: MediaStreamConstraints[] = [
+        {
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        },
+        { video: true, audio: true },
+        { video: { facingMode: 'user' }, audio: true },
+        { video: true, audio: false },
+      ];
+
+      for (const constraints of constraintsList) {
         try {
-          rawStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        } catch (e2) {
-          console.warn('[Teacher] Basic video+audio failed, creating live canvas camera stream fallback:', e2);
-          rawStream = createSyntheticClassroomStream();
-          addToast({
-            type: 'info',
-            title: 'Live Camera Fallback Active',
-            description: 'Broadcasting live Smart Board classroom video stream.',
-          });
+          rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+          if (rawStream && rawStream.getVideoTracks().length > 0) {
+            console.log('[Teacher] getUserMedia succeeded with constraints:', constraints);
+            break;
+          }
+        } catch (errConstraint) {
+          console.warn('[Teacher] getUserMedia attempt failed with:', constraints, errConstraint);
         }
+      }
+
+      if (!rawStream) {
+        console.warn('[Teacher] All physical webcam attempts failed; falling back to canvas classroom stream.');
+        rawStream = createSyntheticClassroomStream();
+        addToast({
+          type: 'info',
+          title: 'Live Board Stream Active',
+          description: 'Webcam permission unavailable or denied. Broadcasting live Smart Board video stream.',
+        });
       }
 
       // Build unified master stream with direct hardware mic track
@@ -733,7 +900,7 @@ export const LectureStudio: React.FC = () => {
       console.log('[Teacher] Camera active:', isCamLive, '| Microphone active:', isMicLive);
 
       startMicLevelMeter(masterStream);
-      startRecording(masterStream);
+      startRecording(masterStream, currentSessionId);
       initWebRTC(masterStream);
     } catch (err) {
       console.warn('[Teacher] Webcam/Mic permission error or failure:', err);
@@ -763,6 +930,95 @@ export const LectureStudio: React.FC = () => {
     setCameraActive(false);
     setMicActive(false);
   };
+
+  // Check and resume active lecture session on component mount (e.g. after teacher navigates back from another page)
+  useEffect(() => {
+    let isMounted = true;
+    const checkAndResumeActiveSession = async () => {
+      try {
+        const res = await lectureApi.getActiveSession(1);
+        const data = res.data;
+        if (isMounted && data?.is_active && data.session?.id) {
+          const sess = data.session;
+          setSessionId(sess.id);
+          sessionIdRef.current = sess.id;
+          setSubject(sess.subject || '');
+          setTopic(sess.topic || '');
+          setIsSessionActive(true);
+          isSessionActiveRef.current = true;
+          setLastCompletedSessionId(null);
+
+          if (sess.started_at) {
+            const startedMs = new Date(sess.started_at).getTime();
+            const elapsed = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+            setRecordingSeconds(elapsed);
+          }
+
+          await startMediaDevices(sess.id);
+          startSpeechRecognition(sess.id);
+          addToast({
+            type: 'info',
+            title: 'Resumed Active Lecture',
+            description: `Reconnected to live lecture session #${sess.id} (${sess.subject || 'Live Lecture'}).`,
+          });
+        }
+      } catch (err) {
+        // No active session — normal state, teacher can start new lecture
+      }
+    };
+
+    checkAndResumeActiveSession();
+
+    return () => {
+      isMounted = false;
+      // On unmount (e.g. navigating to another tab/page in teacher portal):
+      // Inform students that teacher stepped away temporarily so students see blurred placeholder
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && isSessionActiveRef.current) {
+        try {
+          wsRef.current.send(JSON.stringify({
+            type: 'teacher_away',
+            classroom_id: 1,
+            session_id: sessionIdRef.current,
+            message: 'Teacher navigated away temporarily from the lecture screen.',
+          }));
+        } catch {}
+      }
+
+      // Clean up local media hardware and websocket resources so they don't leak,
+      // without ending the backend session so students can continue uninterrupted.
+      stopMicLevelMeter();
+      stopSpeechRecognition();
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      peerConnectionsRef.current.forEach((pc) => {
+        pc.close();
+      });
+      peerConnectionsRef.current.clear();
+      pendingCandidatesRef.current.clear();
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      // Stop active recorder instances without deleting accumulated recorded chunks
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch {}
+        mediaRecorderRef.current = null;
+      }
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        try { audioRecorderRef.current.stop(); } catch {}
+        audioRecorderRef.current = null;
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Start Lecture Session
   const handleStartLecture = async () => {
@@ -795,6 +1051,13 @@ export const LectureStudio: React.FC = () => {
         }
       }
 
+      // Reset previous session's live data cleanly
+      setSubtitles([]);
+      setRaiseHandQueue([]);
+      setConnectedStudents([]);
+      setOcrText(null);
+      setQuizzes([]);
+
       const res = await lectureApi.startSession({
         classroom_id: 1,
         subject,
@@ -803,10 +1066,13 @@ export const LectureStudio: React.FC = () => {
 
       const newSession = res.data.session;
       setSessionId(newSession.id);
+      sessionIdRef.current = newSession.id;
+      setLastCompletedSessionId(null);
       setIsSessionActive(true);
       isSessionActiveRef.current = true;
-      await startMediaDevices();
+      // Start STT immediately so speech transcription is primed with 0ms delay
       startSpeechRecognition(newSession.id);
+      await startMediaDevices(newSession.id);
 
       addToast({
         type: 'success',
@@ -822,24 +1088,13 @@ export const LectureStudio: React.FC = () => {
     }
   };
 
-  // End Lecture Session (Instant UI update + non-blocking background upload)
+
+  // End Lecture Session (Instant UI update + instant WebSocket & backend termination + non-blocking background upload)
   const handleEndLecture = async () => {
     if (!sessionId) return;
     const targetSessionId = sessionId;
 
-    // 1. Immediately set state to inactive and stop local media devices for instant UI response
-    isSessionActiveRef.current = false;
-    setIsSessionActive(false);
-    setSessionId(null);
-    stopMediaDevices();
-
-    addToast({
-      type: 'success',
-      title: 'Lecture Session Ended',
-      description: 'Session ended cleanly. Finalizing recordings and notes in background.',
-    });
-
-    // 2. Broadcast lecture_ended event over WebSockets immediately
+    // 1. Immediately broadcast lecture_ended event over WebSockets FIRST while socket is still open
     try {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
@@ -848,19 +1103,38 @@ export const LectureStudio: React.FC = () => {
           classroom_id: 1,
         }));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[Teacher] WS lecture_ended notice:', e);
+    }
 
-    // 3. Asynchronously upload recording and trigger backend end_session
+    // 2. Trigger backend end_session immediately (instant DB update & server-side WS broadcast)
+    lectureApi.endSession(targetSessionId).catch((e) => {
+      console.warn('[Teacher] Backend end_session notice:', e);
+    });
+
+    // 3. Immediately set state to inactive and stop local media devices for instant UI response
+    isSessionActiveRef.current = false;
+    setIsSessionActive(false);
+    setLastCompletedSessionId(targetSessionId);
+    setSessionId(null);
+    setSubtitles([]);
+    setRaiseHandQueue([]);
+    setConnectedStudents([]);
+    setOcrText(null);
+    stopMediaDevices();
+
+    addToast({
+      type: 'success',
+      title: 'Lecture Session Ended',
+      description: `Session #${targetSessionId} completed. Recordings and AI notes saved for download below.`,
+    });
+
+    // 4. Asynchronously upload recording non-blocking in the background
     (async () => {
       try {
         await stopRecordingAndUpload(targetSessionId);
       } catch (e) {
         console.warn('[Teacher] Recording upload notice:', e);
-      }
-      try {
-        await lectureApi.endSession(targetSessionId);
-      } catch (e) {
-        console.warn('[Teacher] Backend end_session notice:', e);
       }
     })();
   };
@@ -1243,17 +1517,15 @@ export const LectureStudio: React.FC = () => {
                 className={`w-full h-full object-cover transition-opacity duration-300 ${cameraActive ? 'opacity-100 relative z-10' : 'opacity-0 absolute inset-0 pointer-events-none'}`}
               />
 
-              {/* YouTube Style CC Subtitle Overlay */}
-              {isCcEnabled && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[92%] w-auto pointer-events-auto flex flex-col items-center gap-1 animate-fade-in">
-                  <div className="bg-black/90 backdrop-blur-md px-5 py-2.5 rounded-xl border border-yellow-500/40 shadow-2xl flex items-center gap-3 transition-all duration-200">
+              {/* Netflix Style CC Subtitle Overlay — Centered near bottom, comfortably above edge */}
+              {isSessionActive && isCcEnabled && activeSubtitleText && (
+                <div className="absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none flex flex-col items-center gap-1 animate-fade-in">
+                  <div className="bg-black/80 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2.5 transition-all duration-150">
                     <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
                       CC • {targetLang === 'hi' ? 'HINDI' : targetLang === 'te' ? 'TELUGU' : 'ENGLISH'}
                     </span>
-                    <p className="text-yellow-300 font-extrabold text-sm sm:text-base text-center leading-snug tracking-wide drop-shadow-md">
-                      {subtitles.length > 0
-                        ? (subtitles[subtitles.length - 1].text || subtitles[subtitles.length - 1].original_text)
-                        : 'Listening for teacher voice speech...'}
+                    <p className="text-yellow-300 sm:text-yellow-200 font-extrabold text-sm sm:text-base text-center leading-snug tracking-wide drop-shadow-md">
+                      {activeSubtitleText}
                     </p>
                   </div>
                 </div>
@@ -1502,58 +1774,70 @@ export const LectureStudio: React.FC = () => {
           )}
 
           {/* Export & Download Hub */}
-          <div className="card space-y-3">
-            <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-              <Download className="w-4 h-4 text-sky-400" /> Export Lecture Artifacts
-            </h3>
+          {(() => {
+            const exportTargetSessionId = sessionId || lastCompletedSessionId;
+            return (
+              <div className="card space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+                    <Download className="w-4 h-4 text-sky-400" /> Export Lecture Artifacts
+                  </h3>
+                  {lastCompletedSessionId && !sessionId && (
+                    <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30">
+                      Session #{lastCompletedSessionId} Saved
+                    </span>
+                  )}
+                </div>
 
-            <div className="space-y-2 text-xs">
-              <a
-                href={sessionId ? exportApi.downloadSummaryUrl(sessionId) : '#'}
-                download
-                className="btn-secondary w-full justify-between"
-              >
-                <span>Download AI Summary (PDF)</span>
-                <Download className="w-3.5 h-3.5" />
-              </a>
+                <div className="space-y-2 text-xs">
+                  <a
+                    href={exportTargetSessionId ? exportApi.downloadSummaryUrl(exportTargetSessionId) : '#'}
+                    download
+                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <span>Download AI Summary (PDF)</span>
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
 
-              <a
-                href={sessionId ? exportApi.downloadSubtitlesUrl(sessionId) : '#'}
-                download
-                className="btn-secondary w-full justify-between"
-              >
-                <span>Download Captions (VTT)</span>
-                <Download className="w-3.5 h-3.5" />
-              </a>
+                  <a
+                    href={exportTargetSessionId ? exportApi.downloadSubtitlesUrl(exportTargetSessionId) : '#'}
+                    download
+                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <span>Download Captions (VTT)</span>
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
 
-              <a
-                href={sessionId ? exportApi.downloadTranscriptUrl(sessionId) : '#'}
-                download
-                className="btn-secondary w-full justify-between"
-              >
-                <span>Download Transcript (TXT)</span>
-                <Download className="w-3.5 h-3.5" />
-              </a>
+                  <a
+                    href={exportTargetSessionId ? exportApi.downloadTranscriptUrl(exportTargetSessionId) : '#'}
+                    download
+                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <span>Download Transcript (TXT)</span>
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
 
-              <a
-                href={sessionId ? exportApi.downloadAudioUrl(sessionId) : '#'}
-                download
-                className="btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30"
-              >
-                <span>Download Audio Recording (WEBM)</span>
-                <Download className="w-3.5 h-3.5" />
-              </a>
+                  <a
+                    href={exportTargetSessionId ? exportApi.downloadAudioUrl(exportTargetSessionId) : '#'}
+                    download
+                    className={`btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30 ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <span>Download Audio Recording (WEBM)</span>
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
 
-              <a
-                href={sessionId ? exportApi.downloadRecordingUrl(sessionId) : '#'}
-                download
-                className="btn-secondary w-full justify-between text-sky-400 border-sky-500/30"
-              >
-                <span>Download Full Video Recording (WEBM)</span>
-                <Download className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </div>
+                  <a
+                    href={exportTargetSessionId ? exportApi.downloadRecordingUrl(exportTargetSessionId) : '#'}
+                    download
+                    className={`btn-secondary w-full justify-between text-sky-400 border-sky-500/30 ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <span>Download Full Video Recording (WEBM)</span>
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

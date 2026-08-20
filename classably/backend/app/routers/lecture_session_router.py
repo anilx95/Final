@@ -323,19 +323,44 @@ def end_session(
     ).update({"is_active": False, "left_at": datetime.utcnow()})
     db.commit()
 
-    # Broadcast lecture_ended event over WebSockets immediately
+    # Synchronously save initial LectureNote and raw_transcript from LiveSubtitles so export artifacts are immediately available
+    try:
+        subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
+        full_transcript = "\n".join([f"[{s.created_at.strftime('%H:%M:%S')}] {s.speaker_name}: {s.original_text}" for s in subtitles if s.original_text]) if subtitles else ""
+        
+        note = db.query(LectureNote).filter(LectureNote.session_id == session_id).first()
+        if not note:
+            note = LectureNote(
+                session_id=session_id,
+                classroom_id=session.classroom_id,
+                title=f"{session.subject} — {getattr(session, 'topic', 'Lecture') or 'Lecture'}",
+                raw_transcript=full_transcript,
+                summary=f"Lecture summary for {session.subject} ({getattr(session, 'topic', 'Lecture') or 'Lecture'}). Session concluded.",
+                key_points=[s.original_text for s in subtitles[:5]] if subtitles else ["Lecture completed successfully."],
+                formulas=[],
+                definitions=[],
+            )
+            db.add(note)
+        else:
+            note.raw_transcript = full_transcript
+        db.commit()
+    except Exception as note_err:
+        logger.warning(f"Immediate lecture note save warning: {note_err}")
+
+    # Broadcast lecture_ended event over WebSockets immediately to all rooms
     try:
         import asyncio
-        asyncio.create_task(
-            ws_manager.broadcast_event(
-                session.classroom_id,
-                {
-                    "type": "lecture_ended",
-                    "session_id": session_id,
-                    "classroom_id": session.classroom_id,
-                },
-            )
-        )
+        end_event = {
+            "type": "lecture_ended",
+            "session_id": session_id,
+            "classroom_id": session.classroom_id,
+            "status": "ENDED",
+            "message": "The live lecture session has ended.",
+        }
+        asyncio.create_task(ws_manager.broadcast_event(session.classroom_id, end_event))
+        asyncio.create_task(ws_manager.broadcast_event(str(session.classroom_id), end_event))
+        asyncio.create_task(ws_manager.broadcast_event(session_id, end_event))
+        asyncio.create_task(ws_manager.broadcast_event(str(session_id), end_event))
     except Exception as ws_err:
         logger.warning(f"Failed to broadcast lecture_ended event: {ws_err}")
 
@@ -379,25 +404,30 @@ async def ingest_subtitle(
     original_text = payload.get("text", "").strip()
     speaker_name = payload.get("speaker_name") or current_user.full_name or "Teacher"
     target_lang = payload.get("target_lang", "en")
+    is_interim = payload.get("is_interim", False)
 
     if not original_text:
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
-    # Generate translations (fast lookup)
-    translated = original_text
-    if target_lang and target_lang != "en":
-        translated = translation_service.translate(original_text, target_lang)
+    # Precompute common translations so students receive Hindi & Telugu instantly without lagging
+    all_translations = translation_service.get_all_translations(original_text)
+    translated = all_translations.get(target_lang, original_text)
 
-    subtitle = LiveSubtitle(
-        session_id=session_id,
-        speaker_name=speaker_name,
-        original_text=original_text,
-        translated_text=translated,
-        language=target_lang,
-        timestamp_offset=payload.get("timestamp_offset", 0.0),
-    )
-    db.add(subtitle)
-    db.commit()
+    subtitle_id = int(payload.get("id") or (datetime.utcnow().timestamp() * 1000))
+
+    if not is_interim:
+        subtitle = LiveSubtitle(
+            session_id=session_id,
+            speaker_name=speaker_name,
+            original_text=original_text,
+            translated_text=translated,
+            language=target_lang,
+            timestamp_offset=payload.get("timestamp_offset", 0.0),
+        )
+        db.add(subtitle)
+        db.commit()
+        db.refresh(subtitle)
+        subtitle_id = subtitle.id
 
     # Broadcast subtitle IMMEDIATELY to live classroom subscribers via WebSocket
     try:
@@ -406,27 +436,35 @@ async def ingest_subtitle(
 
         event_payload = {
             "type": "subtitle",
+            "is_interim": is_interim,
+            "classroom_id": classroom_id,
+            "session_id": session_id,
             "subtitle": {
-                "id": subtitle.id,
-                "speaker": subtitle.speaker_name,
-                "text": subtitle.original_text,
-                "original_text": subtitle.original_text,
-                "translated_text": subtitle.translated_text,
-                "translations": {
-                    "en": subtitle.original_text,
-                },
-                "timestamp": subtitle.created_at.strftime("%H:%M:%S"),
+                "id": subtitle_id,
+                "speaker": speaker_name,
+                "text": original_text,
+                "original_text": original_text,
+                "translated_text": translated,
+                "translations": all_translations,
+                "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
             },
         }
 
-        # Broadcast to classroom room (e.g. "1"), string room, and session room instantly
+        # Broadcast to classroom rooms and session rooms instantly
         await ws_manager.broadcast_event(classroom_id, event_payload)
         await ws_manager.broadcast_event(str(classroom_id), event_payload)
         await ws_manager.broadcast_event(session_id, event_payload)
+        await ws_manager.broadcast_event(str(session_id), event_payload)
     except Exception as e:
         logger.warning(f"WebSocket subtitle broadcast warning: {e}")
 
-    return {"status": "ingested", "id": subtitle.id, "translated": translated}
+    return {
+        "status": "ingested",
+        "id": subtitle_id,
+        "translated": translated,
+        "translations": all_translations,
+        "is_interim": is_interim,
+    }
 
 
 @router.get("/subtitles/{session_id}")
@@ -580,6 +618,19 @@ def student_connect(
     else:
         student_id = payload.get("student_id", 1)
 
+    # Check if student was previously kicked from this session
+    kicked_record = db.query(ConnectedStudent).filter(
+        ConnectedStudent.session_id == session_id,
+        ConnectedStudent.student_id == student_id,
+        ConnectedStudent.is_kicked == True,
+    ).first()
+
+    if kicked_record:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You have been removed from this live lecture session by the teacher and cannot rejoin.",
+        )
+
     # Check if already connected
     existing = db.query(ConnectedStudent).filter(
         ConnectedStudent.session_id == session_id,
@@ -664,12 +715,19 @@ async def kick_student(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Teacher kicks a student from the live lecture session."""
+    """Teacher kicks a student from the live lecture session with real-time enforcement."""
     conn = db.query(ConnectedStudent).filter(
         ConnectedStudent.session_id == session_id,
         ConnectedStudent.student_id == student_id,
         ConnectedStudent.is_active == True,
     ).first()
+
+    # Even if inactive connection record exists, ensure all records for this student in session are marked kicked
+    if not conn:
+        conn = db.query(ConnectedStudent).filter(
+            ConnectedStudent.session_id == session_id,
+            ConnectedStudent.student_id == student_id,
+        ).first()
 
     if not conn:
         raise HTTPException(status_code=404, detail="Student not found in session.")
@@ -679,23 +737,29 @@ async def kick_student(
     conn.kicked_at = datetime.utcnow()
     db.commit()
 
-    # Broadcast kick message via WebSocket
-    try:
-        if conn.peer_id:
-            await ws_manager.broadcast_event(
-                session_id,
-                {
-                    "type": "student_kicked",
-                    "student_id": student_id,
-                    "peer_id": conn.peer_id,
-                    "message": "You have been removed from this lecture session by the teacher.",
-                },
-            )
-    except Exception as e:
-        logger.warning(f"WebSocket kick broadcast error: {e}")
+    session = db.get(LectureSession, session_id)
+    classroom_id = session.classroom_id if session else 1
 
     student = db.get(Student, student_id)
     student_name = student.name if student else "Student"
+
+    # Broadcast kick message via WebSocket to both classroom and session channels
+    kick_event = {
+        "type": "student_kicked",
+        "student_id": student_id,
+        "peer_id": conn.peer_id,
+        "session_id": session_id,
+        "classroom_id": classroom_id,
+        "message": f"{student_name} has been removed from this live lecture session by the teacher.",
+    }
+
+    try:
+        await ws_manager.broadcast_event(classroom_id, kick_event)
+        await ws_manager.broadcast_event(str(classroom_id), kick_event)
+        await ws_manager.broadcast_event(session_id, kick_event)
+        await ws_manager.broadcast_event(str(session_id), kick_event)
+    except Exception as e:
+        logger.warning(f"WebSocket kick broadcast error: {e}")
 
     return {"message": f"{student_name} has been kicked from the session."}
 
