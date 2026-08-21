@@ -6,7 +6,7 @@ Imports and exposes all database entity models.
 from app.core.database import Base
 
 # Entities
-from app.models.entities.user import User
+from app.models.entities.user import User, EmailOTP
 from app.models.entities.academic import (
     Department, Course, AcademicYear, Semester, Subject, Section, Building, Floor, TimetableSlot
 )
@@ -35,7 +35,7 @@ from app.models.entities.ai_qa import AIQAMessage, AILectureSummary
 from app.models.entities.connected_student import ConnectedStudent
 
 __all__ = [
-    "Base", "User", "Department", "Course", "AcademicYear", "Semester",
+    "Base", "User", "EmailOTP", "Department", "Course", "AcademicYear", "Semester",
     "Subject", "Section", "Building", "Floor", "Classroom", "Student", "Teacher",
     "LectureSession", "LiveSubtitle", "BoardSnapshot", "LectureNote",
     "LectureChapter", "GeneratedQuestion", "LectureRecording", "Assignment",

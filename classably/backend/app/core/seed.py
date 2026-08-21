@@ -106,7 +106,6 @@ def seed_production_data(db: Session):
             academic_year_id=ay.id,
             semester_number=5,
             name="Fall 2026 Semester",
-            is_current=True,
         )
         db.add(sem)
         db.flush()
@@ -174,7 +173,7 @@ def seed_production_data(db: Session):
             name="Dr. Sarah Jenkins",
             email="teacher@classably.edu",
             employee_id="EMP-1001",
-            specialization="Computer Vision & Accessibility",
+            designation="Assistant Professor",
         )
         student_entity = Student(
             id=1,

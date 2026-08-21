@@ -81,6 +81,12 @@ def send_otp(
     otp_code = email_otp_service.generate_otp(email_clean, purpose, db=db)
     email_sent = email_otp_service.send_otp_email(email_clean, otp_code, purpose)
 
+    if not email_sent and not settings.MOCK_EMAIL_IN_DEV:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to dispatch verification email via Gmail SMTP. Please verify email address and try again.",
+        )
+
     response_data = {
         "success": True,
         "message": f"Verification code sent to {email_clean}. Please check your inbox.",

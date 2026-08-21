@@ -1,6 +1,19 @@
+import os
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_CURRENT_DIR = Path(__file__).resolve().parent
+_BACKEND_DIR = _CURRENT_DIR.parent.parent
+_ROOT_DIR = _BACKEND_DIR.parent
+
+_ENV_FILES = [
+    str(_BACKEND_DIR / ".env"),
+    str(_ROOT_DIR / ".env"),
+    str(Path.cwd() / ".env"),
+    ".env",
+]
 
 
 class Settings(BaseSettings):
@@ -62,7 +75,7 @@ class Settings(BaseSettings):
     MOCK_EMAIL_IN_DEV: bool = False
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         case_sensitive=True,
         extra="ignore",
     )

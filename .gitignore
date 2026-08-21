@@ -147,6 +147,9 @@ yolo11n.pt
 scratch/
 */scratch/
 test_paddle.py
+test_smtp.py
+create_local_admin.py
+verify_admin.py
 scratch_20_users.json
 *.tmp
 *.temp

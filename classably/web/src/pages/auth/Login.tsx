@@ -103,10 +103,11 @@ export const Login: React.FC = () => {
         description: `A 6-digit verification code has been dispatched to ${cleanEmail}.`,
       });
     } catch (err: any) {
+      const isNotFound = err.response?.status === 404;
       addToast({
         type: 'error',
-        title: 'Failed to Send OTP',
-        description: err.response?.data?.detail || 'Could not send verification code. Please try again.',
+        title: isNotFound ? 'Account Not Found' : 'Failed to Send OTP',
+        description: err.response?.data?.detail || (isNotFound ? 'This email is not registered yet. Please click Register below to create your account.' : 'Could not send verification code. Please try again.'),
       });
     } finally {
       setIsSendingOtp(false);
