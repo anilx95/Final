@@ -396,7 +396,16 @@ INSTRUCTIONS:
                 "6. **Reinstall & Inflate:** Tuck the tube back inside the tire, seat the tire bead onto the rim, and pump to the recommended PSI rating."
             )
 
-        # G. Conversational Greetings
+        # G. Geography & General Knowledge
+        if "capital of france" in q_lower or ("france" in q_lower and "capital" in q_lower):
+            return (
+                "### Capital of France\n\n"
+                "The capital of France is **Paris**.\n\n"
+                "• **Significance:** Paris is the political, economic, and cultural center of France, located in the north-central part of the country along the Seine River.\n"
+                "• **Key Landmarks:** Eiffel Tower, Louvre Museum, Notre-Dame Cathedral, and Arc de Triomphe."
+            )
+
+        # H. Conversational Greetings
         if q_lower in ["hello", "hi", "hey", "good morning", "good evening", "how are you", "greetings"]:
             return (
                 "Hello! 👋 I'm your AI Assistant. How can I help you today?\n\n"

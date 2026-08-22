@@ -1,20 +1,55 @@
 """
 End-to-End Test Suite for Gmail OTP Authentication (Registration & Login).
-Tests directly against running backend on http://127.0.0.1:8000.
+Tests authentication endpoints with in-memory TestClient and SQLite test database.
 """
 
 import sys
 import os
 import time
-import requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-from app.services.email_otp_service import email_otp_service
+TEST_DB_FILE = "./test_gmail_otp_classably.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_FILE}"
+os.environ["SECRET_KEY"] = "test-secret-key-otp-12345"
+os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
-BASE_URL = "http://127.0.0.1:8000"
+from fastapi.testclient import TestClient
+from app.main import app
+from app.core.database import Base, engine, get_db
+from app.services.email_otp_service import email_otp_service
+from sqlalchemy.orm import sessionmaker
+
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+app.dependency_overrides[get_db] = override_get_db
+client = TestClient(app)
+
+
+def setup_module():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+
+def teardown_module():
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    if os.path.exists(TEST_DB_FILE):
+        try:
+            os.remove(TEST_DB_FILE)
+        except Exception:
+            pass
 
 
 def test_otp_service_core():
@@ -62,7 +97,7 @@ def test_registration_with_otp_flow():
     new_email = f"student_{int(time.time())}@gmail.com"
 
     # Step 1: Request Registration OTP via API
-    res_send = requests.post(f"{BASE_URL}/api/auth/otp/send", json={"email": new_email, "purpose": "register"})
+    res_send = client.post("/api/auth/otp/send", json={"email": new_email, "purpose": "register"})
     print("Send OTP Response:", res_send.status_code, res_send.json())
     assert res_send.status_code == 200
     assert res_send.json()["success"] is True
@@ -78,7 +113,7 @@ def test_registration_with_otp_flow():
         "roll_number": f"STU-{int(time.time()) % 1000000}",
         "otp": "000000",
     }
-    res_bad = requests.post(f"{BASE_URL}/api/auth/register-with-otp", json=bad_payload)
+    res_bad = client.post("/api/auth/register-with-otp", json=bad_payload)
     print("Bad OTP Registration Response:", res_bad.status_code, res_bad.json())
     assert res_bad.status_code == 400
     err_text = str(res_bad.json().get("message") or res_bad.json().get("detail", "")).lower()
@@ -89,7 +124,7 @@ def test_registration_with_otp_flow():
         **bad_payload,
         "otp": valid_otp,
     }
-    res_valid = requests.post(f"{BASE_URL}/api/auth/register-with-otp", json=valid_payload)
+    res_valid = client.post("/api/auth/register-with-otp", json=valid_payload)
     print("Valid OTP Registration Response:", res_valid.status_code, res_valid.json())
     assert res_valid.status_code == 200
     data = res_valid.json()
@@ -98,7 +133,7 @@ def test_registration_with_otp_flow():
     assert data["user"]["role"] == "student"
 
     # Step 4: Verify Direct Password Login works for this newly created account
-    res_pass = requests.post(f"{BASE_URL}/api/auth/login", json={
+    res_pass = client.post("/api/auth/login", json={
         "email": new_email,
         "password": "SecureStudentPass123!",
     })
@@ -106,12 +141,12 @@ def test_registration_with_otp_flow():
     assert res_pass.status_code == 200
 
     # Step 5: Verify Gmail OTP Login works for this newly created account
-    res_l_otp = requests.post(f"{BASE_URL}/api/auth/otp/send", json={"email": new_email, "purpose": "login"})
+    res_l_otp = client.post("/api/auth/otp/send", json={"email": new_email, "purpose": "login"})
     print("Send Login OTP Response:", res_l_otp.status_code, res_l_otp.json())
     assert res_l_otp.status_code == 200
     login_otp = res_l_otp.json()["debug_otp"]
 
-    res_login_otp = requests.post(f"{BASE_URL}/api/auth/login-with-otp", json={
+    res_login_otp = client.post("/api/auth/login-with-otp", json={
         "email": new_email,
         "otp": login_otp,
     })
@@ -120,7 +155,7 @@ def test_registration_with_otp_flow():
     assert res_login_otp.json()["user"]["email"] == new_email
 
     # Step 6: Verify Replaying consumed Login OTP fails
-    res_reuse = requests.post(f"{BASE_URL}/api/auth/login-with-otp", json={
+    res_reuse = client.post("/api/auth/login-with-otp", json={
         "email": new_email,
         "otp": login_otp,
     })
@@ -136,7 +171,7 @@ def test_login_otp_validation_and_security():
     print("=======================================================")
 
     # 1. Non-existent email -> 404
-    res_404 = requests.post(f"{BASE_URL}/api/auth/otp/send", json={
+    res_404 = client.post("/api/auth/otp/send", json={
         "email": "nonexistent.random.user.99@gmail.com",
         "purpose": "login",
     })
@@ -144,7 +179,7 @@ def test_login_otp_validation_and_security():
     assert res_404.status_code == 404
 
     # 2. Invalid email format -> 400
-    res_invalid_email = requests.post(f"{BASE_URL}/api/auth/otp/send", json={
+    res_invalid_email = client.post("/api/auth/otp/send", json={
         "email": "notanemail",
         "purpose": "register",
     })
@@ -155,7 +190,9 @@ def test_login_otp_validation_and_security():
 
 
 if __name__ == "__main__":
+    setup_module()
     test_otp_service_core()
     test_registration_with_otp_flow()
     test_login_otp_validation_and_security()
+    teardown_module()
     print("\n🎉 ALL GMAIL OTP AUTHENTICATION TESTS PASSED WITH 100% SUCCESS! 🎉\n")

@@ -175,6 +175,8 @@ class EmailOTPService:
                 if hmac.compare_digest(record.otp_hash, provided_hash):
                     if consume:
                         record.is_consumed = True
+                        key = self._get_key(clean_email, clean_purpose)
+                        self._otp_store.pop(key, None)
                     db.commit()
                     return True, "Verification successful."
                 else:

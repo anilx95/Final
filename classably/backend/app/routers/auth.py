@@ -81,7 +81,7 @@ def send_otp(
     otp_code = email_otp_service.generate_otp(email_clean, purpose, db=db)
     email_sent = email_otp_service.send_otp_email(email_clean, otp_code, purpose)
 
-    if not email_sent and not settings.MOCK_EMAIL_IN_DEV:
+    if not email_sent and not (settings.DEBUG or settings.MOCK_EMAIL_IN_DEV):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to dispatch verification email via Gmail SMTP. Please verify email address and try again.",
@@ -245,11 +245,8 @@ def register(
         )
 
     college_name_clean = request.college_name.strip() if request.college_name else ""
-    if normalized_role in ["student", "teacher"] and not college_name_clean:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="College / Institution Name is mandatory for registration.",
-        )
+    if not college_name_clean:
+        college_name_clean = "ClassAbly Institution"
 
     existing = get_user_by_email(db, email_clean)
     if existing:

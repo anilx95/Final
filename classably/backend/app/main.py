@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -172,6 +172,17 @@ if os.path.exists(frontend_dist):
     assets_dir = os.path.join(frontend_dist, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/")
+    def root(request: Request):
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return FileResponse(os.path.join(frontend_dist, "index.html"))
+        return {
+            "status": "ok",
+            "message": "ClassAbly Platform API Operational",
+            "version": "1.0.0",
+        }
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
