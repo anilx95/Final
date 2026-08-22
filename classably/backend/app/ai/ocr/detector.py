@@ -1,6 +1,9 @@
 import logging
 
-from paddleocr import PaddleOCR
+try:
+    from paddleocr import PaddleOCR
+except ImportError:
+    PaddleOCR = None
 
 from .config import (
     LANGUAGE,
@@ -15,17 +18,22 @@ logger = logging.getLogger(__name__)
 class OCRDetector:
 
     def __init__(self):
+        self._ocr = None
 
-        logger.info("Initializing PaddleOCR...")
-
-        self.ocr = PaddleOCR(
-            lang=LANGUAGE,
-            use_gpu=USE_GPU,
-            use_angle_cls=USE_ANGLE_CLASSIFIER,
-            show_log=SHOW_LOG,
-        )
-
-        logger.info("PaddleOCR initialized successfully.")
+    @property
+    def ocr(self):
+        if self._ocr is None:
+            if PaddleOCR is None:
+                raise RuntimeError("PaddleOCR is not installed. Please install paddlepaddle and paddleocr.")
+            logger.info("Initializing PaddleOCR...")
+            self._ocr = PaddleOCR(
+                lang=LANGUAGE,
+                use_gpu=USE_GPU,
+                use_angle_cls=USE_ANGLE_CLASSIFIER,
+                show_log=SHOW_LOG,
+            )
+            logger.info("PaddleOCR initialized successfully.")
+        return self._ocr
 
     def detect(self, image):
 
