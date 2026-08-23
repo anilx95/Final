@@ -489,12 +489,12 @@ def get_session_subtitles(session_id: int, target_lang: Optional[str] = "en", db
 
 
 @router.post("/translate")
-def translate_text(payload: dict):
+async def translate_text(payload: dict):
     text = payload.get("text", "").strip()
     target_lang = payload.get("target_lang", "en")
     if not text:
         return {"translated_text": "", "target_lang": target_lang}
-    translated = translation_service.translate(text, target_lang)
+    translated = await translation_service.translate_async(text, target_lang)
     return {"translated_text": translated, "target_lang": target_lang}
 
 

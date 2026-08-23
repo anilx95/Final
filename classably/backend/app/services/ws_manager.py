@@ -1,3 +1,4 @@
+import asyncio
 from collections import defaultdict
 import logging
 
@@ -195,25 +196,22 @@ class WebSocketManager:
     ):
 
         key = str(classroom_id)
+        connections = list(self.classroom_connections.get(key, []))
+        if not connections:
+            return
 
         dead = []
 
-        for ws in self.classroom_connections[key]:
-
+        async def _send(ws: WebSocket):
             try:
-
                 await ws.send_json(event)
-
             except Exception:
-
                 dead.append(ws)
 
-        for ws in dead:
+        await asyncio.gather(*[_send(ws) for ws in connections], return_exceptions=True)
 
-            self.disconnect(
-                key,
-                ws,
-            )
+        for ws in dead:
+            self.disconnect(key, ws)
 
     async def relay_message(
         self,
@@ -245,31 +243,31 @@ class WebSocketManager:
                     dead.append(target_ws)
             else:
                 # Target not yet registered.
-                # For signaling messages (offer/answer/candidate) we must
-                # NOT broadcast — doing so sends every student every offer
-                # and corrupts multi-student WebRTC.
-                # For non-signaling messages we can safely broadcast.
                 if msg_type in ("offer", "answer", "candidate"):
                     logger.warning(
                         "target_id=%s not in peer_id_map for %s message, dropping (peer will retry)",
                         target_id, msg_type,
                     )
                 else:
-                    # Safe to broadcast non-signaling events
-                    for ws in list(self.classroom_connections[key]):
-                        if ws != sender_ws:
+                    # Safe to broadcast non-signaling events concurrently in parallel
+                    targets = [ws for ws in list(self.classroom_connections.get(key, [])) if ws != sender_ws]
+                    if targets:
+                        async def _send_fallback(ws: WebSocket):
                             try:
                                 await ws.send_json(message)
                             except Exception:
                                 dead.append(ws)
+                        await asyncio.gather(*[_send_fallback(ws) for ws in targets], return_exceptions=True)
         else:
-            # ── Broadcast to all classroom members except sender ──
-            for ws in list(self.classroom_connections[key]):
-                if ws != sender_ws:
+            # ── Concurrent parallel broadcast to all classroom members except sender ──
+            targets = [ws for ws in list(self.classroom_connections.get(key, [])) if ws != sender_ws]
+            if targets:
+                async def _send_broadcast(ws: WebSocket):
                     try:
                         await ws.send_json(message)
                     except Exception:
                         dead.append(ws)
+                await asyncio.gather(*[_send_broadcast(ws) for ws in targets], return_exceptions=True)
 
         for ws in dead:
             self.disconnect(key, ws)

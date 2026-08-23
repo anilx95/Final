@@ -1,16 +1,25 @@
 import logging
 import json
-import urllib.request
 import urllib.parse
+from typing import Optional
+import httpx
 
 logger = logging.getLogger(__name__)
 
-try:
-    from deep_translator import GoogleTranslator
-    HAS_TRANSLATOR = True
-except ImportError:
-    HAS_TRANSLATOR = False
-    logger.warning("deep-translator not installed, will use direct API and dictionary fallbacks.")
+# Global persistent AsyncClient for ultra-fast non-blocking HTTP connection reuse
+_HTTPX_CLIENT: Optional[httpx.AsyncClient] = None
+
+
+def get_httpx_client() -> httpx.AsyncClient:
+    global _HTTPX_CLIENT
+    if _HTTPX_CLIENT is None or _HTTPX_CLIENT.is_closed:
+        _HTTPX_CLIENT = httpx.AsyncClient(
+            timeout=3.0,
+            limits=httpx.Limits(max_keepalive_connections=50, max_connections=100),
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        )
+    return _HTTPX_CLIENT
+
 
 # In-memory translation cache to prevent repetitive API calls
 _translation_cache: dict[tuple[str, str], str] = {}
@@ -19,6 +28,7 @@ _translation_cache: dict[tuple[str, str], str] = {}
 _FALLBACK_DICTIONARY = {
     "hi": {
         "hello": "नमस्ते",
+        "welcome": "स्वागत है",
         "welcome to class": "कक्षा में आपका स्वागत है",
         "hello welcome to class": "नमस्ते कक्षा में आपका स्वागत है",
         "lecture": "व्याख्यान",
@@ -49,6 +59,7 @@ _FALLBACK_DICTIONARY = {
     },
     "te": {
         "hello": "హలో",
+        "welcome": "స్వాగతం",
         "welcome to class": "క్లాస్‌కి స్వాగతం",
         "hello welcome to class": "హలో క్లాస్‌కి స్వాగతం",
         "lecture": "పాఠం",
@@ -76,146 +87,166 @@ _FALLBACK_DICTIONARY = {
         "real world applications": "రియల్ వరల్డ్ అప్లికేషన్లు",
         "thank you": "ధన్యవాదాలు",
         "class dismissed": "తరగతి పూర్తయింది",
-    }
+    },
+    "ta": {
+        "hello": "வணக்கம்",
+        "welcome": "வரவேற்கிறோம்",
+        "welcome to class": "வகுப்பிற்கு வரவேற்கிறோம்",
+        "good morning": "காலை வணக்கம்",
+        "let us begin": "தொடங்குவோம்",
+        "today we will learn": "இன்று நாம் கற்போம்",
+        "lecture": "விரிவுரை",
+        "smart classroom": "ஸ்மார்ட் வகுப்பறை",
+        "artificial intelligence": "செயற்கை நுண்ணறிவு",
+        "thank you": "நன்றி",
+    },
+}
+
+_LANG_MAP = {
+    "hindi": "hi",
+    "telugu": "te",
+    "tamil": "ta",
+    "kannada": "kn",
+    "malayalam": "ml",
+    "marathi": "mr",
+    "bengali": "bn",
+    "gujarati": "gu",
+    "punjabi": "pa",
+    "urdu": "ur",
+    "spanish": "es",
+    "french": "fr",
+    "german": "de",
+    "japanese": "ja",
+    "korean": "ko",
+    "chinese (simplified)": "zh-CN",
+    "chinese (traditional)": "zh-TW",
+    "arabic": "ar",
+    "russian": "ru",
 }
 
 
+def normalize_code(lang: str) -> str:
+    clean = (lang or "").strip()
+    lower = clean.lower()
+    if lower in _LANG_MAP:
+        return _LANG_MAP[lower]
+    if lower in ("zh-cn", "zh_cn"):
+        return "zh-CN"
+    if lower in ("zh-tw", "zh_tw"):
+        return "zh-TW"
+    return clean
+
+
 class TranslationService:
-    @staticmethod
-    def translate_via_http(text: str, target_code: str) -> str:
-        """Direct Google Translate free REST API endpoint with resilient timeout."""
-        try:
-            encoded_text = urllib.parse.quote(text)
-            url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_code}&dt=t&q={encoded_text}"
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-            )
-            with urllib.request.urlopen(req, timeout=2.5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-                if payload and len(payload) > 0 and payload[0]:
-                    translated_segments = [item[0] for item in payload[0] if item and len(item) > 0 and item[0]]
-                    result = "".join(translated_segments).strip()
-                    if result:
-                        return result
-        except Exception as e:
-            logger.debug(f"Direct Google Translate API fallback notice: {e}")
-        return ""
-
-    @staticmethod
-    def translate_via_dictionary(text: str, target_code: str) -> str:
-        """Fallback offline translation using exact match in local dictionary."""
-        dict_map = _FALLBACK_DICTIONARY.get(target_code, {})
-        lowered = text.lower().strip()
-        if lowered in dict_map:
-            return dict_map[lowered]
-        return text
-
     @classmethod
-    def translate(cls, text: str, target_lang: str) -> str:
+    async def translate_async(cls, text: str, target_lang: str) -> str:
+        """High-speed async translation via connection-pooled HTTP client."""
         text_str = (text or "").strip()
         if not text_str:
             return ""
 
-        # Default / English -> return as is
         if not target_lang or target_lang.lower() in ("en", "english"):
             return text_str
 
-        lang_code = target_lang.strip()
-        lower_code = lang_code.lower()
-        if lower_code in ("hi", "hindi"):
-            target_code = "hi"
-        elif lower_code in ("te", "telugu"):
-            target_code = "te"
-        elif lower_code in ("ta", "tamil"):
-            target_code = "ta"
-        elif lower_code in ("kn", "kannada"):
-            target_code = "kn"
-        elif lower_code in ("ml", "malayalam"):
-            target_code = "ml"
-        elif lower_code in ("mr", "marathi"):
-            target_code = "mr"
-        elif lower_code in ("bn", "bengali"):
-            target_code = "bn"
-        elif lower_code in ("gu", "gujarati"):
-            target_code = "gu"
-        elif lower_code in ("pa", "punjabi"):
-            target_code = "pa"
-        elif lower_code in ("ur", "urdu"):
-            target_code = "ur"
-        elif lower_code in ("es", "spanish"):
-            target_code = "es"
-        elif lower_code in ("fr", "french"):
-            target_code = "fr"
-        elif lower_code in ("de", "german"):
-            target_code = "de"
-        elif lower_code in ("ja", "japanese"):
-            target_code = "ja"
-        elif lower_code in ("ko", "korean"):
-            target_code = "ko"
-        elif lower_code in ("zh-cn", "zh_cn", "chinese (simplified)"):
-            target_code = "zh-CN"
-        elif lower_code in ("zh-tw", "zh_tw", "chinese (traditional)"):
-            target_code = "zh-TW"
-        elif lower_code in ("ar", "arabic"):
-            target_code = "ar"
-        elif lower_code in ("ru", "russian"):
-            target_code = "ru"
-        else:
-            target_code = lang_code
+        target_code = normalize_code(target_lang)
+        cache_key = (text_str.lower(), target_code)
 
-        cache_key = (text_str, target_code)
         if cache_key in _translation_cache:
             return _translation_cache[cache_key]
 
-        # Tier 1: Check fast local dictionary lookup first for instant response
-        translated_dict = cls.translate_via_dictionary(text_str, target_code)
-        if translated_dict != text_str:
-            _translation_cache[cache_key] = translated_dict
-            return translated_dict
+        # 1. Fast in-memory dictionary lookup (0ms)
+        dict_map = _FALLBACK_DICTIONARY.get(target_code, {})
+        lowered = text_str.lower()
+        if lowered in dict_map:
+            res = dict_map[lowered]
+            _translation_cache[cache_key] = res
+            return res
 
-        # Tier 2: Direct HTTP request to Google Translate API with 2.5s timeout
+        # 2. Async Google Translate REST API via client=dict-chrome-ex and gtx (20ms - 40ms)
         try:
-            translated_http = cls.translate_via_http(text_str, target_code)
-            if translated_http:
-                _translation_cache[cache_key] = translated_http
-                return translated_http
+            client = get_httpx_client()
+            encoded_text = urllib.parse.quote(text_str)
+            for client_type in ("dict-chrome-ex", "gtx"):
+                try:
+                    url = f"https://translate.googleapis.com/translate_a/single?client={client_type}&sl=auto&tl={target_code}&dt=t&q={encoded_text}"
+                    resp = await client.get(url)
+                    if resp.status_code == 200:
+                        payload = resp.json()
+                        if payload and len(payload) > 0 and payload[0]:
+                            translated_segments = [item[0] for item in payload[0] if item and len(item) > 0 and item[0]]
+                            result = "".join(translated_segments).strip()
+                            if result and result.lower() != text_str.lower():
+                                _translation_cache[cache_key] = result
+                                return result
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.debug(f"[TranslationService] Google API error: {e}")
+
+        # 3. Fallback to MyMemory translation API (50ms - 80ms)
+        try:
+            client = get_httpx_client()
+            encoded_text = urllib.parse.quote(text_str)
+            mm_url = f"https://api.mymemory.translated.net/get?q={encoded_text}&langpair=en|{target_code}"
+            mm_resp = await client.get(mm_url)
+            if mm_resp.status_code == 200:
+                mm_data = mm_resp.json()
+                translated = mm_data.get("responseData", {}).get("translatedText", "").strip()
+                if translated and translated.lower() != text_str.lower() and "MYMEMORY WARNING" not in translated:
+                    _translation_cache[cache_key] = translated
+                    return translated
+        except Exception as e:
+            logger.debug(f"[TranslationService] MyMemory API error: {e}")
+
+        # If translation fails, do NOT pollute cache with English
+        return ""
+
+    @classmethod
+    def translate(cls, text: str, target_lang: str) -> str:
+        """Synchronous wrapper for legacy code."""
+        text_str = (text or "").strip()
+        if not text_str or not target_lang or target_lang.lower() in ("en", "english"):
+            return text_str
+
+        target_code = normalize_code(target_lang)
+        cache_key = (text_str.lower(), target_code)
+        if cache_key in _translation_cache:
+            return _translation_cache[cache_key]
+
+        # Fast dictionary
+        dict_map = _FALLBACK_DICTIONARY.get(target_code, {})
+        if text_str.lower() in dict_map:
+            return dict_map[text_str.lower()]
+
+        # Synchronous httpx fallback
+        try:
+            with httpx.Client(timeout=2.0) as client:
+                encoded_text = urllib.parse.quote(text_str)
+                url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_code}&dt=t&q={encoded_text}"
+                resp = client.get(url)
+                if resp.status_code == 200:
+                    payload = resp.json()
+                    if payload and len(payload) > 0 and payload[0]:
+                        segments = [item[0] for item in payload[0] if item and len(item) > 0 and item[0]]
+                        result = "".join(segments).strip()
+                        if result:
+                            _translation_cache[cache_key] = result
+                            return result
         except Exception:
             pass
 
-        # Tier 3: deep-translator with fast fallback
-        if HAS_TRANSLATOR:
-            try:
-                translated = GoogleTranslator(source="auto", target=target_code).translate(text_str)
-                if translated and translated.strip():
-                    _translation_cache[cache_key] = translated.strip()
-                    return translated.strip()
-            except Exception as e:
-                logger.debug(f"deep-translator skipped for '{text_str[:20]}': {e}")
-
-        _translation_cache[cache_key] = text_str
         return text_str
 
     @classmethod
     def get_all_translations(cls, text: str, extra_langs: list[str] = None) -> dict[str, str]:
-        """Pre-compute common translations for real-time WebSocket subtitle payloads."""
         clean = (text or "").strip()
         if not clean:
-            return {"en": "", "hi": "", "te": ""}
-        
-        langs_to_compute = ["hi", "te"]
-        if extra_langs:
-            for l in extra_langs:
-                if l and l != "en" and l not in langs_to_compute:
-                    langs_to_compute.append(l)
-
+            return {"en": ""}
         results = {"en": clean}
-        for lang in langs_to_compute:
-            try:
-                results[lang] = cls.translate(clean, lang)
-            except Exception:
-                results[lang] = clean
-
+        for lang in (extra_langs or ["hi", "te", "ta", "mr", "bn", "es", "fr"]):
+            res = cls.translate(clean, lang)
+            if res and res != clean:
+                results[lang] = res
         return results
 
 
