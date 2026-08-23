@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Video, VideoOff, HelpCircle, Volume2, VolumeX, Globe, Sparkles, Download, CheckCircle2,
   RefreshCw, Mic, MessageSquare, Send, BookOpen, X, ChevronDown, ChevronUp,
-  Loader2, FileText, Brain, Hand, School, Radio, UserCheck, Clock, Shield, Trash2, Zap
+  Loader2, FileText, Brain, Hand, School, Radio, UserCheck, Clock, Shield, Trash2
 } from 'lucide-react';
 import { lectureApi, exportApi, aiQaApi, adminApi, academicsApi } from '../../api/client';
 import { LiveSubtitle, AIQAMessage, AILectureSummary, User, TimetableItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
 import { useAuth } from '../../context/AuthContext';
-import { translateClientText, translateClientTextAsync, getCachedTranslation, translateTokensSynchronously, streamTranslateAsync } from '../../utils/clientTranslation';
+import { translateClientText, translateClientTextAsync, getCachedTranslation } from '../../utils/clientTranslation';
 import { SUPPORTED_LANGUAGES } from '../../utils/languages';
 
 export const StudentLiveLecture: React.FC = () => {
@@ -34,7 +34,7 @@ export const StudentLiveLecture: React.FC = () => {
   const aiInputRef = useRef<HTMLInputElement | null>(null);
   const downloadsRef = useRef<HTMLDivElement | null>(null);
   const [subtitles, setSubtitles] = useState<LiveSubtitle[]>([]);
-  const [targetLang, setTargetLang] = useState<string>(() => localStorage.getItem('classably_student_lang') || 'en');
+  const [targetLang, setTargetLang] = useState('en');
   const [isCcEnabled, setIsCcEnabled] = useState(true);
   const targetLangRef = useRef(targetLang);
 
@@ -106,23 +106,19 @@ export const StudentLiveLecture: React.FC = () => {
     targetLangRef.current = newLang;
     
     // Instantly update active speaking subtitle directly in target language without showing English
-    if (newLang === 'en') {
-      if (lastRawEnglishSubtitleRef.current) {
+    if (lastRawEnglishSubtitleRef.current) {
+      if (newLang === 'en') {
         setActiveSubtitleText(lastRawEnglishSubtitleRef.current);
-      }
-    } else {
-      setActiveSubtitleText(null); // Instantly wipe any English text from screen
-      if (lastRawEnglishSubtitleRef.current) {
+      } else {
         const cached = getCachedTranslation(lastRawEnglishSubtitleRef.current, newLang);
-        if (cached && cached !== lastRawEnglishSubtitleRef.current) {
+        if (cached) {
           setActiveSubtitleText(cached);
-        } else {
-          translateClientTextAsync(lastRawEnglishSubtitleRef.current, newLang).then((translated) => {
-            if (targetLangRef.current === newLang && translated && translated !== lastRawEnglishSubtitleRef.current) {
-              setActiveSubtitleText(translated);
-            }
-          });
         }
+        translateClientTextAsync(lastRawEnglishSubtitleRef.current, newLang).then((translated) => {
+          if (targetLangRef.current === newLang && translated) {
+            setActiveSubtitleText(translated);
+          }
+        });
       }
     }
     
@@ -138,7 +134,7 @@ export const StudentLiveLecture: React.FC = () => {
         const cached = getCachedTranslation(raw, newLang);
         return {
           ...s,
-          text: cached || (s.translations && s.translations[newLang] ? s.translations[newLang] : '...'),
+          text: cached || (s.translations && s.translations[newLang] ? s.translations[newLang] : s.text),
         };
       }));
       // Async translate all log items for target language
@@ -146,7 +142,7 @@ export const StudentLiveLecture: React.FC = () => {
         const raw = s.original_text || s.text;
         translateClientTextAsync(raw, newLang).then((translated) => {
           if (targetLangRef.current === newLang && translated) {
-            setSubtitles((prev) => prev.map((item) => item.id === s.id ? { ...item, text: translated, translated_text: translated } : item));
+            setSubtitles((prev) => prev.map((item) => item.id === s.id ? { ...item, text: translated } : item));
           }
         });
       });
@@ -360,14 +356,12 @@ export const StudentLiveLecture: React.FC = () => {
           const isInterim = Boolean(message.is_interim);
           const subId = sub.id || Date.now();
 
-          // 1. If English or matches speech language -> Instant 0ms display
-          // 1. English Mode: Direct English Display
           if (currentLang === 'en') {
             setActiveSubtitleText(rawText);
             if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
             subtitleClearTimerRef.current = setTimeout(() => {
               setActiveSubtitleText(null);
-            }, 3500);
+            }, 2500);
 
             if (!isInterim) {
               const newSub: LiveSubtitle = {
@@ -380,65 +374,73 @@ export const StudentLiveLecture: React.FC = () => {
                 timestamp: sub.timestamp || new Date().toLocaleTimeString(),
               };
               setSubtitles((prev) => {
-                const cleanPrev = prev.filter((s) => s.id !== subId && s.id !== 999999999);
+                const cleanPrev = prev.filter((s) => s.id !== subId);
                 return [...cleanPrev, newSub];
               });
             }
             return;
           }
 
-          // 2. Multilingual Target Language -> Streaming Incremental Pipeline
-          // Priority A: Direct WebSocket packet translation (0ms)
-          if (sub.translations && sub.translations[currentLang] && sub.translations[currentLang].toLowerCase() !== rawText.toLowerCase()) {
-            setActiveSubtitleText(sub.translations[currentLang]);
+          // Target language is NOT English -> Seamless translated display without flashing English
+          let instantTranslation: string | null = null;
+          if (sub.translations && sub.translations[currentLang]) {
+            instantTranslation = sub.translations[currentLang];
+          } else if (sub.translated_text && sub.language === currentLang) {
+            instantTranslation = sub.translated_text;
+          } else {
+            instantTranslation = getCachedTranslation(rawText, currentLang);
+          }
+
+          if (instantTranslation) {
+            setActiveSubtitleText(instantTranslation);
             if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
             subtitleClearTimerRef.current = setTimeout(() => {
               setActiveSubtitleText(null);
-            }, 3500);
-          } else {
-            // Priority B: Incremental streaming translation on partial phrases as teacher speaks
-            streamTranslateAsync(rawText, currentLang, (streamedTranslation) => {
-              if (targetLangRef.current === currentLang && streamedTranslation && streamedTranslation.toLowerCase() !== rawText.toLowerCase()) {
-                setActiveSubtitleText(streamedTranslation);
-                if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
-                subtitleClearTimerRef.current = setTimeout(() => {
-                  setActiveSubtitleText(null);
-                }, 3500);
-              }
-            });
-          }
+            }, 2500);
 
-          // If finalized sentence: Finalize and log high-accuracy translation
-          if (!isInterim) {
+            if (!isInterim) {
+              const newSub: LiveSubtitle = {
+                id: subId,
+                speaker: sub.speaker || 'Teacher',
+                text: instantTranslation,
+                original_text: rawText,
+                translated_text: instantTranslation,
+                translations: sub.translations,
+                timestamp: sub.timestamp || new Date().toLocaleTimeString(),
+              };
+              setSubtitles((prev) => {
+                const cleanPrev = prev.filter((s) => s.id !== subId);
+                return [...cleanPrev, newSub];
+              });
+            }
+          } else {
+            // Asynchronously fetch translation and update subtitle without showing raw English first
             translateClientTextAsync(rawText, currentLang).then((translated) => {
-              if (targetLangRef.current === currentLang && translated && translated.toLowerCase() !== rawText.toLowerCase()) {
+              if (targetLangRef.current === currentLang && lastRawEnglishSubtitleRef.current === rawText && translated) {
                 setActiveSubtitleText(translated);
                 if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
                 subtitleClearTimerRef.current = setTimeout(() => {
                   setActiveSubtitleText(null);
-                }, 3500);
+                }, 2500);
+              }
 
-                const finalSub: LiveSubtitle = {
+              if (!isInterim && translated) {
+                const newSub: LiveSubtitle = {
                   id: subId,
                   speaker: sub.speaker || 'Teacher',
                   text: translated,
                   original_text: rawText,
                   translated_text: translated,
-                  translations: { ...(sub.translations || {}), [currentLang]: translated },
+                  translations: sub.translations,
                   timestamp: sub.timestamp || new Date().toLocaleTimeString(),
                 };
-
                 setSubtitles((prev) => {
-                  const existingIndex = prev.findIndex((s) => s.id === subId);
-                  if (existingIndex >= 0) {
-                    return prev.map((item) => (item.id === subId ? finalSub : item));
-                  }
-                  return [...prev.filter((s) => s.id !== 999999999), finalSub];
+                  const cleanPrev = prev.filter((s) => s.id !== subId);
+                  return [...cleanPrev, newSub];
                 });
               }
             }).catch(() => {});
           }
-
           return;
         }
 
@@ -817,7 +819,7 @@ export const StudentLiveLecture: React.FC = () => {
   };
   const connBadge = getConnectionBadge();
 
-  const subtitleSizeClass = subtitleSize === 'sm' ? 'text-xs sm:text-sm' : subtitleSize === 'lg' ? 'text-base sm:text-lg md:text-xl' : 'text-sm sm:text-base md:text-lg';
+  const subtitleSizeClass = subtitleSize === 'sm' ? 'text-xs' : subtitleSize === 'lg' ? 'text-lg' : 'text-sm sm:text-base';
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -1054,19 +1056,11 @@ export const StudentLiveLecture: React.FC = () => {
               </div>
             )}
 
-            {/* Netflix / YouTube Style CC Subtitle Overlay — Centered with dynamic position */}
+            {/* Netflix Style CC Subtitle Overlay — Centered near bottom, comfortably above edge */}
             {sessionStatus === 'ACTIVE' && isCcEnabled && activeSubtitleText && (
-              <div className={`absolute ${subtitlePosition === 'top' ? 'top-8 sm:top-10' : 'bottom-8 sm:bottom-10'} left-1/2 -translate-x-1/2 z-30 max-w-[88%] sm:max-w-2xl w-auto pointer-events-none transition-all duration-200 animate-fade-in`}>
-                <div className="bg-black/90 backdrop-blur-md px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl border border-white/15 shadow-2xl flex flex-col items-center gap-1 text-center transition-all duration-200">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-yellow-400 text-black font-mono shadow-sm shrink-0">
-                      CC • {targetLang.toUpperCase()}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400">
-                      {teacherName || 'Teacher'}
-                    </span>
-                  </div>
-                  <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} text-center leading-relaxed tracking-wide drop-shadow-md`}>
+              <div className="absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none transition-all duration-150 animate-fade-in">
+                <div className="bg-black/80 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-white/15 shadow-2xl flex items-center justify-center text-center transition-all duration-150">
+                  <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} text-center leading-snug tracking-wide drop-shadow-md`}>
                     {activeSubtitleText}
                   </p>
                 </div>
@@ -1105,18 +1099,12 @@ export const StudentLiveLecture: React.FC = () => {
               {subtitles.length === 0 ? (
                 <p className="text-xs text-slate-500 py-4 text-center">Waiting for teacher to speak...</p>
               ) : (
-                subtitles.map((sub) => {
-                  const displayText = targetLang === 'en'
-                    ? (sub.original_text || sub.text)
-                    : (sub.translations?.[targetLang] || (sub.translated_text && sub.translated_text !== sub.original_text ? sub.translated_text : null) || getCachedTranslation(sub.original_text || sub.text, targetLang) || (sub.text !== sub.original_text ? sub.text : '...'));
-
-                  return (
-                    <div key={sub.id} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
-                      <span className="font-bold text-sky-400">{sub.speaker}: </span>
-                      <span className="text-slate-200">{displayText}</span>
-                    </div>
-                  );
-                })
+                subtitles.map((sub) => (
+                  <div key={sub.id} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
+                    <span className="font-bold text-sky-400">{sub.speaker}: </span>
+                    <span className="text-slate-200">{sub.text}</span>
+                  </div>
+                ))
               )}
             </div>
           </div>
