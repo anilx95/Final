@@ -72,10 +72,10 @@ export const StudentRequests: React.FC = () => {
       <div className="space-y-3">
         {loading ? (
           <div className="card text-center py-8 text-slate-400 text-xs">Loading queue...</div>
-        ) : requests.length === 0 ? (
+        ) : (!requests || requests.length === 0) ? (
           <div className="card text-center py-12 text-slate-400 text-xs">No active student assistance requests in queue.</div>
         ) : (
-          requests.map((r) => (
+          (requests || []).map((r) => (
             <div key={r.id} className="card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-amber-500/30">
               <div>
                 <div className="flex items-center gap-2">

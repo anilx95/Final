@@ -8,6 +8,7 @@ import { ToastProvider } from './context/ToastContext';
 
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
+import { ErrorBoundary, RouteErrorBoundary } from './components/common/ErrorBoundary';
 
 // Auth Pages
 import { Login } from './pages/auth/Login';
@@ -64,17 +65,19 @@ const RoleRootRedirect: React.FC = () => {
 
 const router = createBrowserRouter([
   // Public Auth Routes
-  { path: '/login', element: <Login /> },
-  { path: '/register', element: <Register /> },
-  { path: '/forgot-password', element: <ForgotPassword /> },
-  { path: '/reset-password', element: <ResetPassword /> },
+  { path: '/login', element: <Login />, errorElement: <RouteErrorBoundary /> },
+  { path: '/register', element: <Register />, errorElement: <RouteErrorBoundary /> },
+  { path: '/forgot-password', element: <ForgotPassword />, errorElement: <RouteErrorBoundary /> },
+  { path: '/reset-password', element: <ResetPassword />, errorElement: <RouteErrorBoundary /> },
 
   // Protected Enterprise Portals (nested)
   {
     element: <ProtectedRoute />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         element: <AppLayout />,
+        errorElement: <RouteErrorBoundary />,
         children: [
           { path: '/', element: <RoleRootRedirect /> },
           { path: '/profile', element: <Profile /> },
@@ -128,20 +131,22 @@ const router = createBrowserRouter([
   },
 
   // 404
-  { path: '*', element: <NotFoundPage /> },
+  { path: '*', element: <NotFoundPage />, errorElement: <RouteErrorBoundary /> },
 ]);
 
 export const App: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AccessibilityProvider>
-          <ToastProvider>
-            <RouterProvider router={router} future={{ v7_startTransition: true }} />
-          </ToastProvider>
-        </AccessibilityProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AccessibilityProvider>
+            <ToastProvider>
+              <RouterProvider router={router} future={{ v7_startTransition: true }} />
+            </ToastProvider>
+          </AccessibilityProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 export default App;

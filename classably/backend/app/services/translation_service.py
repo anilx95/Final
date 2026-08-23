@@ -104,26 +104,11 @@ class TranslationService:
 
     @staticmethod
     def translate_via_dictionary(text: str, target_code: str) -> str:
-        """Fallback offline translation using local dictionary."""
+        """Fallback offline translation using exact match in local dictionary."""
         dict_map = _FALLBACK_DICTIONARY.get(target_code, {})
         lowered = text.lower().strip()
         if lowered in dict_map:
             return dict_map[lowered]
-        
-        # Word-by-word replacement fallback for phrase
-        words = lowered.split()
-        translated_words = []
-        has_replacement = False
-        for word in words:
-            clean_word = word.strip(",.!?")
-            if clean_word in dict_map:
-                translated_words.append(dict_map[clean_word])
-                has_replacement = True
-            else:
-                translated_words.append(word)
-        if has_replacement:
-            return " ".join(translated_words)
-        
         return text
 
     @classmethod
@@ -136,11 +121,46 @@ class TranslationService:
         if not target_lang or target_lang.lower() in ("en", "english"):
             return text_str
 
-        lang_code = target_lang.lower().strip()
-        if lang_code in ("hi", "hindi"):
+        lang_code = target_lang.strip()
+        lower_code = lang_code.lower()
+        if lower_code in ("hi", "hindi"):
             target_code = "hi"
-        elif lang_code in ("te", "telugu"):
+        elif lower_code in ("te", "telugu"):
             target_code = "te"
+        elif lower_code in ("ta", "tamil"):
+            target_code = "ta"
+        elif lower_code in ("kn", "kannada"):
+            target_code = "kn"
+        elif lower_code in ("ml", "malayalam"):
+            target_code = "ml"
+        elif lower_code in ("mr", "marathi"):
+            target_code = "mr"
+        elif lower_code in ("bn", "bengali"):
+            target_code = "bn"
+        elif lower_code in ("gu", "gujarati"):
+            target_code = "gu"
+        elif lower_code in ("pa", "punjabi"):
+            target_code = "pa"
+        elif lower_code in ("ur", "urdu"):
+            target_code = "ur"
+        elif lower_code in ("es", "spanish"):
+            target_code = "es"
+        elif lower_code in ("fr", "french"):
+            target_code = "fr"
+        elif lower_code in ("de", "german"):
+            target_code = "de"
+        elif lower_code in ("ja", "japanese"):
+            target_code = "ja"
+        elif lower_code in ("ko", "korean"):
+            target_code = "ko"
+        elif lower_code in ("zh-cn", "zh_cn", "chinese (simplified)"):
+            target_code = "zh-CN"
+        elif lower_code in ("zh-tw", "zh_tw", "chinese (traditional)"):
+            target_code = "zh-TW"
+        elif lower_code in ("ar", "arabic"):
+            target_code = "ar"
+        elif lower_code in ("ru", "russian"):
+            target_code = "ru"
         else:
             target_code = lang_code
 
@@ -177,20 +197,28 @@ class TranslationService:
         return text_str
 
     @classmethod
-    def get_all_translations(cls, text: str) -> dict[str, str]:
+    def get_all_translations(cls, text: str, extra_langs: list[str] = None) -> dict[str, str]:
         """Pre-compute common translations for real-time WebSocket subtitle payloads."""
         clean = (text or "").strip()
         if not clean:
             return {"en": "", "hi": "", "te": ""}
         
-        hi_trans = cls.translate(clean, "hi")
-        te_trans = cls.translate(clean, "te")
-        return {
-            "en": clean,
-            "hi": hi_trans,
-            "te": te_trans,
-        }
+        langs_to_compute = ["hi", "te"]
+        if extra_langs:
+            for l in extra_langs:
+                if l and l != "en" and l not in langs_to_compute:
+                    langs_to_compute.append(l)
+
+        results = {"en": clean}
+        for lang in langs_to_compute:
+            try:
+                results[lang] = cls.translate(clean, lang)
+            except Exception:
+                results[lang] = clean
+
+        return results
 
 
 translation_service = TranslationService()
+
 

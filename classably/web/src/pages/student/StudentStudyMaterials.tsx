@@ -26,9 +26,9 @@ export const StudentStudyMaterials: React.FC = () => {
         notesApi.getNotes(),
         lectureApi.getHistory(),
       ]);
-      if (matRes.status === 'fulfilled') setMaterials(matRes.value.data);
-      if (notesRes.status === 'fulfilled') setNotes(notesRes.value.data);
-      if (historyRes.status === 'fulfilled' && historyRes.value.data?.length > 0) {
+      if (matRes.status === 'fulfilled') setMaterials(Array.isArray(matRes.value.data) ? matRes.value.data : []);
+      if (notesRes.status === 'fulfilled') setNotes(Array.isArray(notesRes.value.data) ? notesRes.value.data : []);
+      if (historyRes.status === 'fulfilled' && Array.isArray(historyRes.value.data) && historyRes.value.data.length > 0) {
         setRecordings(historyRes.value.data);
       } else {
         setRecordings([
@@ -107,19 +107,19 @@ export const StudentStudyMaterials: React.FC = () => {
             onClick={() => setActiveTab('materials')}
             className={`btn-secondary text-xs ${activeTab === 'materials' ? 'border-emerald-500 text-emerald-300 bg-emerald-500/10' : ''}`}
           >
-            <FileText className="w-3.5 h-3.5" /> Study Materials ({materials.length})
+            <FileText className="w-3.5 h-3.5" /> Study Materials ({(materials || []).length})
           </button>
           <button
             onClick={() => setActiveTab('recordings')}
             className={`btn-secondary text-xs ${activeTab === 'recordings' ? 'border-sky-500 text-sky-300 bg-sky-500/10' : ''}`}
           >
-            <Video className="w-3.5 h-3.5 text-sky-400" /> Recordings & Subtitles ({recordings.length})
+            <Video className="w-3.5 h-3.5 text-sky-400" /> Recordings & Subtitles ({(recordings || []).length})
           </button>
           <button
             onClick={() => setActiveTab('notes')}
             className={`btn-secondary text-xs ${activeTab === 'notes' ? 'border-purple-500 text-purple-300 bg-purple-500/10' : ''}`}
           >
-            <Sparkles className="w-3.5 h-3.5" /> AI Notes ({notes.length})
+            <Sparkles className="w-3.5 h-3.5" /> AI Notes ({(notes || []).length})
           </button>
         </div>
       </div>
@@ -129,10 +129,10 @@ export const StudentStudyMaterials: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {loading ? (
             <div className="card col-span-2 text-center py-12 text-slate-400 text-xs">Loading course files...</div>
-          ) : materials.length === 0 ? (
+          ) : (!materials || materials.length === 0) ? (
             <div className="card col-span-2 text-center py-12 text-slate-400 text-xs">No study materials uploaded yet.</div>
           ) : (
-            materials.map((m) => (
+            (materials || []).map((m) => (
               <div key={m.id} className="card p-5 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between">
@@ -289,12 +289,12 @@ export const StudentStudyMaterials: React.FC = () => {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {notes.length === 0 ? (
+            {(!notes || notes.length === 0) ? (
               <div className="card col-span-2 text-center py-12 text-slate-400 text-xs">
                 No AI notes found. Click "Create AI Note" to record lecture notes.
               </div>
             ) : (
-              notes.map((n: any) => (
+              (notes || []).map((n: any) => (
                 <div key={n.id} className="card p-5 space-y-3 border-purple-500/20">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-mono font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">

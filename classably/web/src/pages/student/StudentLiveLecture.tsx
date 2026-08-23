@@ -9,7 +9,8 @@ import { LiveSubtitle, AIQAMessage, AILectureSummary, User, TimetableItem } from
 import { useToast } from '../../context/ToastContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
 import { useAuth } from '../../context/AuthContext';
-import { translateClientText } from '../../utils/clientTranslation';
+import { translateClientText, translateClientTextAsync, getCachedTranslation } from '../../utils/clientTranslation';
+import { SUPPORTED_LANGUAGES } from '../../utils/languages';
 
 export const StudentLiveLecture: React.FC = () => {
   const { addToast } = useToast();
@@ -106,19 +107,46 @@ export const StudentLiveLecture: React.FC = () => {
     
     // Instantly update active speaking subtitle directly in target language without showing English
     if (lastRawEnglishSubtitleRef.current) {
-      const translated = newLang === 'en' 
-        ? lastRawEnglishSubtitleRef.current 
-        : translateClientText(lastRawEnglishSubtitleRef.current, newLang);
-      setActiveSubtitleText(translated);
+      if (newLang === 'en') {
+        setActiveSubtitleText(lastRawEnglishSubtitleRef.current);
+      } else {
+        const cached = getCachedTranslation(lastRawEnglishSubtitleRef.current, newLang);
+        if (cached) {
+          setActiveSubtitleText(cached);
+        }
+        translateClientTextAsync(lastRawEnglishSubtitleRef.current, newLang).then((translated) => {
+          if (targetLangRef.current === newLang && translated) {
+            setActiveSubtitleText(translated);
+          }
+        });
+      }
     }
     
     // Update transcript log entries
-    setSubtitles((prev) => prev.map((s) => ({
-      ...s,
-      text: newLang === 'en' 
-        ? (s.original_text || s.text) 
-        : translateClientText(s.original_text || s.text, newLang),
-    })));
+    if (newLang === 'en') {
+      setSubtitles((prev) => prev.map((s) => ({
+        ...s,
+        text: s.original_text || s.text,
+      })));
+    } else {
+      setSubtitles((prev) => prev.map((s) => {
+        const raw = s.original_text || s.text;
+        const cached = getCachedTranslation(raw, newLang);
+        return {
+          ...s,
+          text: cached || (s.translations && s.translations[newLang] ? s.translations[newLang] : s.text),
+        };
+      }));
+      // Async translate all log items for target language
+      subtitles.forEach((s) => {
+        const raw = s.original_text || s.text;
+        translateClientTextAsync(raw, newLang).then((translated) => {
+          if (targetLangRef.current === newLang && translated) {
+            setSubtitles((prev) => prev.map((item) => item.id === s.id ? { ...item, text: translated } : item));
+          }
+        });
+      });
+    }
   };
 
   useEffect(() => {
@@ -321,47 +349,97 @@ export const StudentLiveLecture: React.FC = () => {
         if (message.type === 'subtitle' && message.subtitle) {
           const sub = message.subtitle;
           const currentLang = targetLangRef.current;
-          const rawText = sub.original_text || sub.text || '';
+          const rawText = (sub.original_text || sub.text || '').trim();
+          if (!rawText) return;
           lastRawEnglishSubtitleRef.current = rawText;
-
-          let displayText = rawText;
-          if (currentLang && currentLang !== 'en') {
-            if (sub.translations && sub.translations[currentLang]) {
-              displayText = sub.translations[currentLang];
-            } else if (sub.translated_text && sub.language === currentLang) {
-              displayText = sub.translated_text;
-            } else {
-              displayText = translateClientText(rawText, currentLang);
-            }
-          }
-
-          // 1. Instantly update live Netflix subtitle overlay directly in target language without showing English
-          setActiveSubtitleText(displayText);
-          if (subtitleClearTimerRef.current) {
-            clearTimeout(subtitleClearTimerRef.current);
-          }
-          subtitleClearTimerRef.current = setTimeout(() => {
-            setActiveSubtitleText(null);
-          }, 2500);
 
           const isInterim = Boolean(message.is_interim);
           const subId = sub.id || Date.now();
 
-          // 2. Add finalized sentences to the permanent transcript log
-          if (!isInterim) {
-            const newSub: LiveSubtitle = {
-              id: subId,
-              speaker: sub.speaker || 'Teacher',
-              text: displayText,
-              original_text: rawText,
-              translated_text: displayText,
-              translations: sub.translations,
-              timestamp: sub.timestamp || new Date().toLocaleTimeString(),
-            };
-            setSubtitles((prev) => {
-              const cleanPrev = prev.filter((s) => s.id !== subId);
-              return [...cleanPrev, newSub];
-            });
+          if (currentLang === 'en') {
+            setActiveSubtitleText(rawText);
+            if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
+            subtitleClearTimerRef.current = setTimeout(() => {
+              setActiveSubtitleText(null);
+            }, 2500);
+
+            if (!isInterim) {
+              const newSub: LiveSubtitle = {
+                id: subId,
+                speaker: sub.speaker || 'Teacher',
+                text: rawText,
+                original_text: rawText,
+                translated_text: rawText,
+                translations: sub.translations,
+                timestamp: sub.timestamp || new Date().toLocaleTimeString(),
+              };
+              setSubtitles((prev) => {
+                const cleanPrev = prev.filter((s) => s.id !== subId);
+                return [...cleanPrev, newSub];
+              });
+            }
+            return;
+          }
+
+          // Target language is NOT English -> Seamless translated display without flashing English
+          let instantTranslation: string | null = null;
+          if (sub.translations && sub.translations[currentLang]) {
+            instantTranslation = sub.translations[currentLang];
+          } else if (sub.translated_text && sub.language === currentLang) {
+            instantTranslation = sub.translated_text;
+          } else {
+            instantTranslation = getCachedTranslation(rawText, currentLang);
+          }
+
+          if (instantTranslation) {
+            setActiveSubtitleText(instantTranslation);
+            if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
+            subtitleClearTimerRef.current = setTimeout(() => {
+              setActiveSubtitleText(null);
+            }, 2500);
+
+            if (!isInterim) {
+              const newSub: LiveSubtitle = {
+                id: subId,
+                speaker: sub.speaker || 'Teacher',
+                text: instantTranslation,
+                original_text: rawText,
+                translated_text: instantTranslation,
+                translations: sub.translations,
+                timestamp: sub.timestamp || new Date().toLocaleTimeString(),
+              };
+              setSubtitles((prev) => {
+                const cleanPrev = prev.filter((s) => s.id !== subId);
+                return [...cleanPrev, newSub];
+              });
+            }
+          } else {
+            // Asynchronously fetch translation and update subtitle without showing raw English first
+            translateClientTextAsync(rawText, currentLang).then((translated) => {
+              if (targetLangRef.current === currentLang && lastRawEnglishSubtitleRef.current === rawText && translated) {
+                setActiveSubtitleText(translated);
+                if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
+                subtitleClearTimerRef.current = setTimeout(() => {
+                  setActiveSubtitleText(null);
+                }, 2500);
+              }
+
+              if (!isInterim && translated) {
+                const newSub: LiveSubtitle = {
+                  id: subId,
+                  speaker: sub.speaker || 'Teacher',
+                  text: translated,
+                  original_text: rawText,
+                  translated_text: translated,
+                  translations: sub.translations,
+                  timestamp: sub.timestamp || new Date().toLocaleTimeString(),
+                };
+                setSubtitles((prev) => {
+                  const cleanPrev = prev.filter((s) => s.id !== subId);
+                  return [...cleanPrev, newSub];
+                });
+              }
+            }).catch(() => {});
           }
           return;
         }
@@ -590,8 +668,13 @@ export const StudentLiveLecture: React.FC = () => {
         if (isMountedRef.current && Array.isArray(res.data)) {
           const formatted = res.data.map((s: any) => {
             let displayText = s.text;
-            if (targetLang !== 'en' && s.original_text && s.text === s.original_text) {
-              displayText = translateClientText(s.original_text, targetLang);
+            if (targetLang !== 'en' && s.original_text) {
+              const cached = getCachedTranslation(s.original_text, targetLang);
+              if (cached) {
+                displayText = cached;
+              } else if (s.translated_text && s.language === targetLang) {
+                displayText = s.translated_text;
+              }
             }
             return { ...s, text: displayText };
           });
@@ -794,16 +877,19 @@ export const StudentLiveLecture: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <Globe className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+            <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0" />
             <select
               value={targetLang}
               onChange={(e) => handleLanguageChange(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none"
+              className="bg-transparent text-xs text-slate-200 focus:outline-none max-w-[150px] sm:max-w-[210px] cursor-pointer font-medium"
+              title="Select subtitle translation language"
             >
-              <option value="en">English</option>
-              <option value="hi">Hindi (हिन्दी)</option>
-              <option value="te">Telugu (తెలుగు)</option>
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code} className="bg-slate-900 text-slate-200">
+                  {lang.name} {lang.nativeName && lang.nativeName !== lang.name ? `(${lang.nativeName})` : ''}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -1318,13 +1404,13 @@ export const StudentLiveLecture: React.FC = () => {
               </div>
             </div>
 
-            {summaryData.key_points.length > 0 && (
+            {(summaryData.key_points || []).length > 0 && (
               <div>
                 <h4 className="text-sm font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4" /> Key Points
                 </h4>
                 <ul className="space-y-1.5">
-                  {summaryData.key_points.map((p, i) => (
+                  {(summaryData.key_points || []).map((p, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
                       <span className="text-emerald-500 mt-0.5">•</span>
                       <span>{p}</span>
@@ -1334,26 +1420,26 @@ export const StudentLiveLecture: React.FC = () => {
               </div>
             )}
 
-            {summaryData.definitions.length > 0 && (
+            {(summaryData.definitions || []).length > 0 && (
               <div>
                 <h4 className="text-sm font-bold text-sky-400 mb-2 flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4" /> Definitions
                 </h4>
                 <div className="space-y-1.5">
-                  {summaryData.definitions.map((d, i) => (
+                  {(summaryData.definitions || []).map((d, i) => (
                     <div key={i} className="text-xs text-slate-300 bg-slate-950 p-2 rounded-lg border border-slate-800">{d}</div>
                   ))}
                 </div>
               </div>
             )}
 
-            {summaryData.formulas.length > 0 && (
+            {(summaryData.formulas || []).length > 0 && (
               <div>
                 <h4 className="text-sm font-bold text-amber-400 mb-2 flex items-center gap-1.5">
                   <FileText className="w-4 h-4" /> Formulas
                 </h4>
                 <div className="space-y-1.5">
-                  {summaryData.formulas.map((f, i) => (
+                  {(summaryData.formulas || []).map((f, i) => (
                     <div key={i} className="text-xs text-amber-200 font-mono bg-slate-950 p-2 rounded-lg border border-amber-500/20">{f}</div>
                   ))}
                 </div>

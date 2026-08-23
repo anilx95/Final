@@ -21,7 +21,7 @@ export const StudentHome: React.FC = () => {
       dashboardApi.getAttendance(),
       lectureApi.getTeachers(),
     ]).then(([ttRes, dashRes, attRes, teachRes]) => {
-      if (ttRes.status === 'fulfilled') setTimetable(ttRes.value.data);
+      if (ttRes.status === 'fulfilled') setTimetable(Array.isArray(ttRes.value.data) ? ttRes.value.data : []);
       const statsObj: any = {};
       if (dashRes.status === 'fulfilled') Object.assign(statsObj, dashRes.value.data);
       if (attRes.status === 'fulfilled') Object.assign(statsObj, attRes.value.data);
@@ -39,12 +39,12 @@ export const StudentHome: React.FC = () => {
         <div>
           <span className="text-[11px] uppercase font-bold text-sky-400 tracking-wider">Student Accessibility Portal</span>
           <h1 className="text-2xl font-extrabold text-slate-100 mt-1">Welcome, {user?.full_name}!</h1>
-          <p className="text-xs text-slate-300 mt-1">Your adaptive learning workspace is active with {activeDisabilities.length} active accommodations.</p>
+          <p className="text-xs text-slate-300 mt-1">Your adaptive learning workspace is active with {(activeDisabilities || []).length} active accommodations.</p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => speakText(`Welcome back ${user?.full_name}. You have ${timetable.length} classes scheduled today.`)}
+            onClick={() => speakText(`Welcome back ${user?.full_name}. You have ${(timetable || []).length} classes scheduled today.`)}
             className="btn-secondary text-xs"
             title="Read Screen Aloud"
           >
@@ -65,10 +65,10 @@ export const StudentHome: React.FC = () => {
           <div>
             <h4 className="font-bold text-slate-100 text-xs">Active Disability Profiles</h4>
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {activeDisabilities.length === 0 ? (
+              {(!activeDisabilities || activeDisabilities.length === 0) ? (
                 <span className="text-[11px] text-slate-400">Standard View Mode</span>
               ) : (
-                activeDisabilities.map((d) => (
+                (activeDisabilities || []).map((d) => (
                   <span key={d} className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[10px] font-bold capitalize">
                     {d.replace('_', ' ')}
                   </span>
@@ -114,7 +114,7 @@ export const StudentHome: React.FC = () => {
       <div className="card space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-            <School className="w-4 h-4 text-emerald-400" /> Live Faculty & Department Educators ({teachers.length})
+            <School className="w-4 h-4 text-emerald-400" /> Live Faculty & Department Educators ({(teachers || []).length})
           </h3>
           <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> Active Faculty Directory
@@ -124,10 +124,10 @@ export const StudentHome: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {loading ? (
             <div className="col-span-full text-center py-4 text-slate-400 text-xs">Loading faculty list...</div>
-          ) : teachers.length === 0 ? (
+          ) : (!teachers || teachers.length === 0) ? (
             <div className="col-span-full text-center py-4 text-slate-400 text-xs">No faculty members found.</div>
           ) : (
-            teachers.map((tch) => {
+            (teachers || []).map((tch) => {
               const isLive = tch.is_live;
               return (
                 <div key={tch.id} className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between gap-3">
@@ -179,10 +179,10 @@ export const StudentHome: React.FC = () => {
         <div className="space-y-3">
           {loading ? (
             <div className="text-center py-8 text-slate-400 text-xs">Loading timetable...</div>
-          ) : timetable.length === 0 ? (
+          ) : (!timetable || timetable.length === 0) ? (
             <div className="text-center py-8 text-slate-400 text-xs">No enrolled classes scheduled for today.</div>
           ) : (
-            timetable.map((slot, idx) => (
+            (timetable || []).map((slot, idx) => (
               <div key={idx} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0">

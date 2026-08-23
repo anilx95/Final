@@ -1178,26 +1178,30 @@ export const LectureStudio: React.FC = () => {
     if (!sessionId) return;
     try {
       const res = await lectureApi.getSubtitles(sessionId, targetLang);
-      setSubtitles(res.data);
-    } catch (err) {}
+      setSubtitles(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      // keep current subtitles on fetch failure
+    }
   };
 
   const fetchRaiseHandQueue = async () => {
     if (!sessionId) return;
     try {
       const res = await lectureApi.getRaiseHandQueue(sessionId);
-      setRaiseHandQueue(res.data);
-    } catch (err) {}
+      setRaiseHandQueue(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      // keep current queue on fetch failure
+    }
   };
 
   const fetchConnectedStudents = async () => {
     if (!sessionId) return;
     try {
       const res = await lectureApi.getConnectedStudents(sessionId);
-      if (Array.isArray(res.data)) {
-        setConnectedStudents(res.data);
-      }
-    } catch (err) {}
+      setConnectedStudents(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      // keep current connected students on fetch failure
+    }
   };
 
   const handleKickStudent = async (studentId: number, studentName: string) => {
@@ -1296,7 +1300,7 @@ export const LectureStudio: React.FC = () => {
     try {
       await lectureApi.generateQuiz(sessionId);
       const res = await lectureApi.getQuiz(sessionId);
-      setQuizzes(res.data);
+      setQuizzes(Array.isArray(res.data) ? res.data : []);
       addToast({
         type: 'success',
         title: 'AI Quiz Generated',
@@ -1636,7 +1640,7 @@ export const LectureStudio: React.FC = () => {
                     </button>
                   )}
                   <span className="text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                    {subtitles.length} Subtitles
+                    {(subtitles || []).length} Subtitles
                   </span>
                 </div>
               </div>
@@ -1659,7 +1663,7 @@ export const LectureStudio: React.FC = () => {
 
             {/* Live Subtitle Transcript Stream Box */}
             <div ref={subtitleContainerRef} className="space-y-2 max-h-60 overflow-y-auto bg-slate-950/80 p-3 rounded-xl border border-slate-800">
-              {subtitles.length === 0 ? (
+              {(!subtitles || subtitles.length === 0) ? (
                 <p className="text-xs text-slate-500 py-4 text-center">No speech transcripts ingested yet.</p>
               ) : (
                 subtitles.map((sub) => (
@@ -1682,7 +1686,7 @@ export const LectureStudio: React.FC = () => {
           <div className="card space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                <Users className="w-4 h-4 text-sky-400" /> Connected Live Students ({connectedStudents.length})
+                <Users className="w-4 h-4 text-sky-400" /> Connected Live Students ({(connectedStudents || []).length})
               </h3>
               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
                 {isSessionActive ? 'LIVE SESSION' : 'INACTIVE'}
@@ -1692,7 +1696,7 @@ export const LectureStudio: React.FC = () => {
             <div className="space-y-2 max-h-56 overflow-y-auto">
               {!isSessionActive ? (
                 <p className="text-xs text-slate-500 py-4 text-center">Start a lecture session to see connected students.</p>
-              ) : connectedStudents.length === 0 ? (
+              ) : (!connectedStudents || connectedStudents.length === 0) ? (
                 <p className="text-xs text-slate-500 py-4 text-center">No students currently connected to live stream.</p>
               ) : (
                 connectedStudents.map((st, idx) => {
@@ -1728,12 +1732,12 @@ export const LectureStudio: React.FC = () => {
                 <HelpCircle className="w-4 h-4 text-amber-400" /> Raised Hand Assistance Queue
               </h3>
               <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-                {raiseHandQueue.length} Pending
+                {(raiseHandQueue || []).length} Pending
               </span>
             </div>
 
             <div className="space-y-2 max-h-56 overflow-y-auto">
-              {raiseHandQueue.length === 0 ? (
+              {(!raiseHandQueue || raiseHandQueue.length === 0) ? (
                 <p className="text-xs text-slate-500 py-4 text-center">No pending student assistance requests.</p>
               ) : (
                 raiseHandQueue.map((item) => (
@@ -1756,13 +1760,13 @@ export const LectureStudio: React.FC = () => {
           </div>
 
           {/* Generated AI Quizzes */}
-          {quizzes.length > 0 && (
+          {((quizzes || []).length > 0) && (
             <div className="card space-y-3 border-purple-500/30 bg-purple-950/20">
               <h3 className="font-bold text-purple-300 text-sm flex items-center gap-2">
                 <BookOpen className="w-4 h-4" /> AI Generated Quizzes & Flashcards
               </h3>
               <div className="space-y-2 max-h-60 overflow-y-auto text-xs">
-                {quizzes.map((q) => (
+                {(quizzes || []).map((q) => (
                   <div key={q.id} className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
                     <span className="text-[10px] uppercase font-bold text-purple-400">{q.type}</span>
                     <div className="font-semibold text-slate-100">{q.question}</div>

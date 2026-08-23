@@ -88,7 +88,24 @@ def sync_db_schema():
 
     logger = logging.getLogger("app.database")
     try:
-        # First ensure all tables are created
+        # Import all entity models so Base.metadata is fully populated
+        import app.models.entities.user
+        import app.models.entities.student
+        import app.models.entities.teacher
+        import app.models.entities.classroom
+        import app.models.entities.academic
+        import app.models.entities.smart_classroom
+        import app.models.entities.lecture
+        import app.models.entities.accessibility
+        import app.models.entities.assignments
+        import app.models.entities.attendance
+        import app.models.entities.voice
+        import app.models.entities.ai_qa
+        import app.models.notification
+        import app.models.audit_log
+        import app.models.entities.connected_student
+
+        # Ensure all tables are created
         Base.metadata.create_all(bind=engine)
 
         inspector = inspect(engine)
@@ -123,5 +140,26 @@ def sync_db_schema():
                 seed_production_data(db_session)
         except Exception as seed_err:
             logger.warning(f"Seeding warning: {seed_err}")
+
+        # Ensure PostgreSQL auto-increment sequences are synchronized to max(id)
+        if engine.dialect.name == "postgresql":
+            with engine.connect() as conn:
+                for table in Base.metadata.sorted_tables:
+                    try:
+                        conn.execute(
+                            text(
+                                f"SELECT setval(pg_get_serial_sequence('{table.name}', 'id'), coalesce(max(id), 0) + 1, false) FROM {table.name};"
+                            )
+                        )
+                    except Exception:
+                        pass
+                conn.commit()
     except Exception as e:
         logger.warning(f"Database schema sync warning: {e}")
+
+
+# Initialize schema automatically
+try:
+    sync_db_schema()
+except Exception as _init_err:
+    pass

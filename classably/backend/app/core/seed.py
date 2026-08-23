@@ -181,8 +181,8 @@ def seed_production_data(db: Session):
             classroom_id=classroom_1.id,
             name="Alex Rivera",
             roll_number="2026-CS-001",
-            email="student@classably.edu",
-            disability_type="Visually Impaired",
+            college_name="Stanford Institute of Technology",
+            disability_profiles=["visual_low_vision"],
             preferred_font_scale=1.25,
             preferred_theme="dark",
             voice_only_mode=True,
@@ -193,11 +193,11 @@ def seed_production_data(db: Session):
 
         # 6. Smart Devices
         devices = [
-            SmartDevice(id=1, classroom_id=1, name="Smart Board OCR Camera", device_type="camera", serial_number="CAM-101", status="online"),
-            SmartDevice(id=2, classroom_id=1, name="Classroom Lighting Relay", device_type="light", serial_number="LGT-101", status="online"),
-            SmartDevice(id=3, classroom_id=1, name="Smart Climate Fan", device_type="fan", serial_number="FAN-101", status="online"),
-            SmartDevice(id=4, classroom_id=1, name="Motorized Wheelchair Desk", device_type="desk", serial_number="DSK-101", status="online"),
-            SmartDevice(id=5, classroom_id=1, name="Emergency Assistance Actuator", device_type="emergency_relay", serial_number="EMG-101", status="online"),
+            SmartDevice(id=1, classroom_id=1, name="Smart Board OCR Camera", device_type="camera", mac_address="CAM-101", status="online"),
+            SmartDevice(id=2, classroom_id=1, name="Classroom Lighting Relay", device_type="light", mac_address="LGT-101", status="online"),
+            SmartDevice(id=3, classroom_id=1, name="Smart Climate Fan", device_type="fan", mac_address="FAN-101", status="online"),
+            SmartDevice(id=4, classroom_id=1, name="Motorized Wheelchair Desk", device_type="desk", mac_address="DSK-101", status="online"),
+            SmartDevice(id=5, classroom_id=1, name="Emergency Assistance Actuator", device_type="emergency_relay", mac_address="EMG-101", status="online"),
         ]
         db.add_all(devices)
         db.flush()

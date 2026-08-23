@@ -93,7 +93,7 @@ export const LectureHistory: React.FC = () => {
           <RefreshCw className="w-6 h-6 text-sky-400 animate-spin mx-auto" />
           <p>Loading lecture recordings...</p>
         </div>
-      ) : sessions.length === 0 ? (
+      ) : (!sessions || sessions.length === 0) ? (
         <div className="card p-12 text-center text-xs text-slate-400 space-y-3">
           <div className="p-4 rounded-full bg-slate-900 text-slate-500 w-fit mx-auto border border-slate-800">
             <BookOpen className="w-8 h-8 text-slate-400" />
@@ -259,7 +259,7 @@ export const LectureHistory: React.FC = () => {
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                 }`}
               >
-                <FileText className="w-3.5 h-3.5" /> Interactive Transcript ({subtitles.length})
+                <FileText className="w-3.5 h-3.5" /> Interactive Transcript ({(subtitles || []).length})
               </button>
 
               {summary && (
@@ -331,13 +331,13 @@ export const LectureHistory: React.FC = () => {
                       <RefreshCw className="w-5 h-5 text-purple-400 animate-spin mx-auto mb-2" />
                       Loading speech transcript...
                     </div>
-                  ) : filteredSubtitles.length === 0 ? (
+                  ) : (!filteredSubtitles || filteredSubtitles.length === 0) ? (
                     <div className="text-center py-8 text-slate-500 text-xs">
                       No transcript entries found matching "{searchQuery}".
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2">
-                      {filteredSubtitles.map((sub, i) => (
+                      {(filteredSubtitles || []).map((sub, i) => (
                         <div key={i} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs flex items-start gap-3">
                           <span className="font-mono text-[10px] text-sky-400 font-bold bg-sky-500/10 px-2 py-0.5 rounded shrink-0">
                             {sub.timestamp || `#${i + 1}`}
@@ -360,11 +360,11 @@ export const LectureHistory: React.FC = () => {
                     <h3 className="font-bold text-slate-100 text-sm">AI Lecture Summary & Key Takeaways</h3>
                   </div>
 
-                  {summary.key_takeaways && summary.key_takeaways.length > 0 && (
+                  {((summary.key_takeaways || []).length > 0) && (
                     <div className="space-y-2">
                       <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Key Concepts</h4>
                       <ul className="space-y-1.5">
-                        {summary.key_takeaways.map((item: string, idx: number) => (
+                        {(summary.key_takeaways || []).map((item: string, idx: number) => (
                           <li key={idx} className="text-xs text-slate-300 flex items-start gap-2">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                             <span>{item}</span>

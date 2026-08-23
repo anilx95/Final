@@ -23,7 +23,7 @@ export const TeacherAssignments: React.FC = () => {
     setLoading(true);
     try {
       const res = await academicsApi.getAssignments();
-      setAssignments(res.data);
+      setAssignments(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -91,12 +91,12 @@ export const TeacherAssignments: React.FC = () => {
           <div className="card col-span-2 text-center py-12 text-slate-400 text-xs">
             Loading assignment database...
           </div>
-        ) : assignments.length === 0 ? (
+        ) : (!assignments || assignments.length === 0) ? (
           <div className="card col-span-2 text-center py-12 text-slate-400 text-xs">
             No assignments created yet. Click "Post New Assignment" to get started.
           </div>
         ) : (
-          assignments.map((a) => (
+          (assignments || []).map((a) => (
             <div key={a.id} className="card p-5 space-y-3 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">

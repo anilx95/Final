@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, Volume2, Globe, Type, Contrast, Sparkles, Check } from 'lucide-react';
 import { useAccessibility, DisabilityProfile } from '../../context/AccessibilityContext';
+import { SUPPORTED_LANGUAGES } from '../../utils/languages';
 
 export const AccessibilityToolbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,9 +36,9 @@ export const AccessibilityToolbar: React.FC = () => {
       >
         <Sparkles className="w-4 h-4 text-sky-400" />
         <span className="hidden sm:inline">Accessibility Hub</span>
-        {activeDisabilities.length > 0 && (
+        {(activeDisabilities || []).length > 0 && (
           <span className="bg-sky-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-            {activeDisabilities.length}
+            {(activeDisabilities || []).length}
           </span>
         )}
       </button>
@@ -144,13 +145,11 @@ export const AccessibilityToolbar: React.FC = () => {
                 onChange={(e) => setTargetLanguage(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
               >
-                <option value="en">English (US)</option>
-                <option value="es">Spanish (Español)</option>
-                <option value="fr">French (Français)</option>
-                <option value="de">German (Deutsch)</option>
-                <option value="hi">Hindi (हिन्दी)</option>
-                <option value="zh">Chinese (中文)</option>
-                <option value="ar">Arabic (العربية)</option>
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.name} {l.nativeName ? `(${l.nativeName})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

@@ -488,6 +488,16 @@ def get_session_subtitles(session_id: int, target_lang: Optional[str] = "en", db
     return result
 
 
+@router.post("/translate")
+def translate_text(payload: dict):
+    text = payload.get("text", "").strip()
+    target_lang = payload.get("target_lang", "en")
+    if not text:
+        return {"translated_text": "", "target_lang": target_lang}
+    translated = translation_service.translate(text, target_lang)
+    return {"translated_text": translated, "target_lang": target_lang}
+
+
 @router.post("/upload-recording/{session_id}")
 async def upload_recording(
     session_id: int,

@@ -11,18 +11,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 TEST_DB_FILE = "./test_gmail_otp_classably.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_FILE}"
-os.environ["SECRET_KEY"] = "test-secret-key-otp-12345"
-os.environ["REDIS_URL"] = "redis://localhost:6379/0"
+test_engine = create_engine(f"sqlite:///{TEST_DB_FILE}", connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 from fastapi.testclient import TestClient
 from app.main import app
-from app.core.database import Base, engine, get_db
+from app.core.database import Base, get_db
 from app.services.email_otp_service import email_otp_service
-from sqlalchemy.orm import sessionmaker
-
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def override_get_db():
@@ -33,18 +32,19 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
 def setup_module():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = override_get_db
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
 
 
 def teardown_module():
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
+    app.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=test_engine)
+    test_engine.dispose()
     if os.path.exists(TEST_DB_FILE):
         try:
             os.remove(TEST_DB_FILE)

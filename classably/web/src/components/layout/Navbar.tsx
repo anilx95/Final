@@ -19,12 +19,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   useEffect(() => {
     if (user) {
       notificationsApi.getNotifications()
-        .then((res) => setNotifications(res.data))
+        .then((res) => setNotifications(Array.isArray(res.data) ? res.data : []))
         .catch(() => {});
     }
   }, [user]);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadCount = (notifications || []).filter((n) => !n.is_read).length;
 
   const handleLogout = () => {
     logout();

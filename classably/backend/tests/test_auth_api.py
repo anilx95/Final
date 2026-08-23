@@ -1,17 +1,15 @@
 import os
 import unittest
 from fastapi.testclient import TestClient
-
-TEST_DB_FILE = "./test_classably.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_FILE}"
-os.environ["SECRET_KEY"] = "test-secret-key-12345"
-os.environ["REDIS_URL"] = "redis://localhost:6379/0"
-
-from app.main import app
-from app.core.database import Base, engine, get_db
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TEST_DB_FILE = "./test_classably.db"
+test_engine = create_engine(f"sqlite:///{TEST_DB_FILE}", connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+from app.main import app
+from app.core.database import Base, get_db
 
 
 def override_get_db():
@@ -22,19 +20,17 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 class AuthApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
+        Base.metadata.drop_all(bind=test_engine)
+        Base.metadata.create_all(bind=test_engine)
 
     @classmethod
     def tearDownClass(cls):
-        Base.metadata.drop_all(bind=engine)
-        engine.dispose()
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=test_engine)
+        test_engine.dispose()
         if os.path.exists(TEST_DB_FILE):
             try:
                 os.remove(TEST_DB_FILE)
@@ -42,7 +38,11 @@ class AuthApiTests(unittest.TestCase):
                 pass
 
     def setUp(self):
+        app.dependency_overrides[get_db] = override_get_db
         self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
 
     def test_root_endpoint(self):
         response = self.client.get("/")

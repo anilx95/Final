@@ -266,7 +266,7 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
           ) : (
             <div className="flex justify-between items-center">
               <span className="text-xs text-slate-400 font-semibold">
-                Scheduled Slots for Today ({timetable.length})
+                Scheduled Slots for Today ({(timetable || []).length})
               </span>
               <button
                 onClick={startAddNewSlot}
@@ -279,12 +279,12 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
 
           {/* List of Existing Slots */}
           <div className="space-y-3">
-            {timetable.length === 0 ? (
+            {(!timetable || timetable.length === 0) ? (
               <div className="text-center py-8 text-slate-500 text-xs">
                 No upcoming lecture slots found. Click "Add Class Slot" above to schedule one.
               </div>
             ) : (
-              timetable.map((slot) => (
+              (timetable || []).map((slot) => (
                 <div
                   key={slot.id}
                   className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${

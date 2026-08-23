@@ -16,7 +16,7 @@ export const TeacherHome: React.FC = () => {
   const fetchTimetable = async () => {
     try {
       const res = await academicsApi.getTodayTimetable();
-      setTimetable(res.data);
+      setTimetable(Array.isArray(res.data) ? res.data : []);
     } catch (e) {}
   };
 
@@ -27,7 +27,7 @@ export const TeacherHome: React.FC = () => {
       teacherDashboardApi.getTeacherDashboard(teacherId),
       dashboardApi.getOverview(),
     ]).then(([ttRes, dashRes, overviewRes]) => {
-      if (ttRes.status === 'fulfilled') setTimetable(ttRes.value.data);
+      if (ttRes.status === 'fulfilled') setTimetable(Array.isArray(ttRes.value.data) ? ttRes.value.data : []);
       if (dashRes.status === 'fulfilled') {
         setDashboardData(dashRes.value.data);
       } else if (overviewRes.status === 'fulfilled') {
@@ -43,7 +43,7 @@ export const TeacherHome: React.FC = () => {
         <div>
           <span className="text-[11px] uppercase font-bold text-sky-400 tracking-wider">Faculty Portal</span>
           <h1 className="text-2xl font-extrabold text-slate-100 mt-1">Welcome Back, {user?.full_name}!</h1>
-          <p className="text-xs text-slate-300 mt-1">You have {timetable.length} scheduled lectures today. Smart OCR and Live Transcription are ready.</p>
+          <p className="text-xs text-slate-300 mt-1">You have {(timetable || []).length} scheduled lectures today. Smart OCR and Live Transcription are ready.</p>
         </div>
 
         <Link to="/teacher/lecture-studio" className="btn-primary whitespace-nowrap">
@@ -143,12 +143,12 @@ export const TeacherHome: React.FC = () => {
         <div className="space-y-3">
           {loading ? (
             <div className="text-center py-8 text-slate-400 text-xs">Loading timetable...</div>
-          ) : timetable.length === 0 ? (
+          ) : (!timetable || timetable.length === 0) ? (
             <div className="text-center py-8 text-slate-400 text-xs">
               No classes scheduled for today. Click "Manage / Edit Upcoming Classes" to add slots.
             </div>
           ) : (
-            timetable.map((slot, idx) => (
+            (timetable || []).map((slot, idx) => (
               <div key={idx} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-slate-700 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="p-3 rounded-xl bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0">
