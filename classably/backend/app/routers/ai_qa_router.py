@@ -271,3 +271,22 @@ def get_summary(
         "style": summary.style,
         "created_at": summary.created_at.strftime("%Y-%m-%d %H:%M:%S") if summary.created_at else None,
     }
+
+
+@router.post("/visualize")
+def generate_visual_diagram(
+    payload: dict,
+):
+    """
+    Explain → Visualize Engine: Generates structured interactive diagrams
+    (SVG/Canvas nodes, relationships, and spatial audio description) for the active lesson topic & speech.
+    """
+    from app.services.visual_engine_service import visual_engine_service
+    topic = payload.get("topic", "").strip() or payload.get("text", "").strip() or "General Science"
+    transcript = payload.get("transcript", "").strip() or payload.get("live_transcript", "").strip() or ""
+    subject = payload.get("subject", "Science")
+    target_lang = payload.get("target_lang", "en")
+
+    diagram = visual_engine_service.find_or_generate_diagram(topic, transcript, subject, target_lang)
+    return {"success": True, "diagram": diagram}
+

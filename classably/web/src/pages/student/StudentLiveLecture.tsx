@@ -12,6 +12,8 @@ import { useAuth } from '../../context/AuthContext';
 import { translateClientText, translateClientTextAsync, getCachedTranslation } from '../../utils/clientTranslation';
 import { SUPPORTED_LANGUAGES } from '../../utils/languages';
 
+import { VisualLearningEngine } from '../../components/visuals/VisualLearningEngine';
+
 export const StudentLiveLecture: React.FC = () => {
   const { addToast } = useToast();
   const { speakText } = useAccessibility();
@@ -95,6 +97,8 @@ export const StudentLiveLecture: React.FC = () => {
   const chatScrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const lastRawEnglishSubtitleRef = useRef<string>('');
+  const lastProcessedSubSeqRef = useRef<number>(0);
+  const [liveSpeechText, setLiveSpeechText] = useState<string>('');
 
   // Ensure student page always loads positioned at the exact TOP of the page
   useEffect(() => {
@@ -351,7 +355,17 @@ export const StudentLiveLecture: React.FC = () => {
           const currentLang = targetLangRef.current;
           const rawText = (sub.original_text || sub.text || '').trim();
           if (!rawText) return;
+
+          // Out-of-order packet protection
+          if (message.seq && message.seq < lastProcessedSubSeqRef.current) {
+            return;
+          }
+          if (message.seq) {
+            lastProcessedSubSeqRef.current = message.seq;
+          }
+
           lastRawEnglishSubtitleRef.current = rawText;
+          setLiveSpeechText(rawText);
 
           const isInterim = Boolean(message.is_interim);
           const subId = sub.id || Date.now();
@@ -361,7 +375,7 @@ export const StudentLiveLecture: React.FC = () => {
             if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
             subtitleClearTimerRef.current = setTimeout(() => {
               setActiveSubtitleText(null);
-            }, 2500);
+            }, 3000);
 
             if (!isInterim) {
               const newSub: LiveSubtitle = {
@@ -374,7 +388,7 @@ export const StudentLiveLecture: React.FC = () => {
                 timestamp: sub.timestamp || new Date().toLocaleTimeString(),
               };
               setSubtitles((prev) => {
-                const cleanPrev = prev.filter((s) => s.id !== subId);
+                const cleanPrev = prev.filter((s) => s.id !== subId && s.id < 999999000);
                 return [...cleanPrev, newSub];
               });
             }
@@ -396,7 +410,7 @@ export const StudentLiveLecture: React.FC = () => {
             if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
             subtitleClearTimerRef.current = setTimeout(() => {
               setActiveSubtitleText(null);
-            }, 2500);
+            }, 3000);
 
             if (!isInterim) {
               const newSub: LiveSubtitle = {
@@ -409,7 +423,7 @@ export const StudentLiveLecture: React.FC = () => {
                 timestamp: sub.timestamp || new Date().toLocaleTimeString(),
               };
               setSubtitles((prev) => {
-                const cleanPrev = prev.filter((s) => s.id !== subId);
+                const cleanPrev = prev.filter((s) => s.id !== subId && s.id < 999999000);
                 return [...cleanPrev, newSub];
               });
             }
@@ -421,7 +435,7 @@ export const StudentLiveLecture: React.FC = () => {
                 if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
                 subtitleClearTimerRef.current = setTimeout(() => {
                   setActiveSubtitleText(null);
-                }, 2500);
+                }, 3000);
               }
 
               if (!isInterim && translated) {
@@ -435,7 +449,7 @@ export const StudentLiveLecture: React.FC = () => {
                   timestamp: sub.timestamp || new Date().toLocaleTimeString(),
                 };
                 setSubtitles((prev) => {
-                  const cleanPrev = prev.filter((s) => s.id !== subId);
+                  const cleanPrev = prev.filter((s) => s.id !== subId && s.id < 999999000);
                   return [...cleanPrev, newSub];
                 });
               }
@@ -1070,6 +1084,26 @@ export const StudentLiveLecture: React.FC = () => {
 
           {/* Audio Element (hidden) */}
           <audio ref={audioRef} autoPlay playsInline muted={isAudioMuted} className="hidden" />
+
+          {/* Automatic AI Visual Learning Engine (Auto-Synced with Teacher Speech) */}
+          <div className="h-[480px]">
+            <VisualLearningEngine
+              liveTranscript={
+                liveSpeechText ||
+                (subtitles.length > 0
+                  ? subtitles.map((s) => s.original_text || s.text).slice(-4).join(' ')
+                  : sessionTopic || '')
+              }
+              fullTranscript={subtitles.map((s) => s.original_text || s.text).join(' ')}
+              currentTopic={sessionTopic || 'Water Cycle'}
+              subject={sessionSubject || 'Science'}
+              targetLang={targetLang}
+              onAskAboutNode={(label) => {
+                setAiQuestion(`Can you explain ${label} in detail?`);
+                if (aiInputRef.current) aiInputRef.current.focus();
+              }}
+            />
+          </div>
 
           {/* Auto-Read Toggle */}
           <div className="flex items-center justify-between card p-3 bg-slate-900/60 border border-slate-800">

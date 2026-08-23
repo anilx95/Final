@@ -130,6 +130,8 @@ export const aiQaApi = {
     api.post(`/api/ai-qa/summarize/${sessionId}`, { style }),
   getSummary: (sessionId: number) =>
     api.get(`/api/ai-qa/summary/${sessionId}`),
+  visualizeDiagram: (data: { topic: string; transcript?: string; subject?: string; target_lang?: string }) =>
+    api.post('/api/ai-qa/visualize', data),
 };
 
 // Smart Devices & Sensors

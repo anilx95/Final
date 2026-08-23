@@ -98,15 +98,20 @@ export const LectureStudio: React.FC = () => {
     }
   }, [subtitles]);
 
+  const subtitleSeqRef = useRef<number>(0);
   const pendingSubtitlesQueueRef = useRef<any[]>([]);
 
   const broadcastSubtitle = (subPayload: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(subPayload));
+      try {
+        wsRef.current.send(JSON.stringify(subPayload));
+      } catch (err) {
+        console.warn('[Teacher] WS send error:', err);
+      }
     } else {
       // Ensure initial words spoken during startup are not dropped while WebSocket connects
       pendingSubtitlesQueueRef.current.push(subPayload);
-      if (pendingSubtitlesQueueRef.current.length > 25) {
+      if (pendingSubtitlesQueueRef.current.length > 30) {
         pendingSubtitlesQueueRef.current.shift();
       }
     }
@@ -130,11 +135,11 @@ export const LectureStudio: React.FC = () => {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3;
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
-        console.log('[STT] Live speech recognition started instantly.');
+        console.log('[STT] Live speech recognition started instantly with high sensitivity.');
         setIsSttActive(true);
       };
 
@@ -144,7 +149,15 @@ export const LectureStudio: React.FC = () => {
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          const transcriptText = result[0]?.transcript?.trim() || '';
+          let transcriptText = result[0]?.transcript?.trim() || '';
+          if (!transcriptText && result.length > 1) {
+            for (let alt = 1; alt < result.length; alt++) {
+              if (result[alt]?.transcript?.trim()) {
+                transcriptText = result[alt].transcript.trim();
+                break;
+              }
+            }
+          }
           if (!transcriptText) continue;
 
           if (result.isFinal) {
@@ -154,11 +167,13 @@ export const LectureStudio: React.FC = () => {
           }
         }
 
-        const activeText = finalTranscript || interimTranscript;
+        const activeText = (finalTranscript || interimTranscript).trim();
         const isFinal = Boolean(finalTranscript);
 
         if (activeText) {
-          const subId = isFinal ? Date.now() : 999999999;
+          subtitleSeqRef.current += 1;
+          const seq = subtitleSeqRef.current;
+          const subId = isFinal ? Date.now() : 999999000 + (seq % 1000);
 
           // 1. Instant UI update with 0ms delay (disappears after silence)
           setActiveSubtitleText(activeText);
@@ -167,16 +182,18 @@ export const LectureStudio: React.FC = () => {
           }
           subtitleClearTimerRef.current = setTimeout(() => {
             setActiveSubtitleText(null);
-          }, 2500);
+          }, 3000);
 
           // 2. Broadcast immediately to students with zero buffering
           const subPayload = {
             type: 'subtitle',
             classroom_id: 1,
             session_id: activeSessionId || sessionIdRef.current,
+            seq: seq,
             is_interim: !isFinal,
             subtitle: {
               id: subId,
+              seq: seq,
               speaker: user?.full_name || 'Educator',
               text: activeText,
               original_text: activeText,
@@ -187,7 +204,7 @@ export const LectureStudio: React.FC = () => {
 
           if (isFinal) {
             setSubtitles((prev) => {
-              const withoutInterim = prev.filter((s) => s.id !== 999999999);
+              const withoutInterim = prev.filter((s) => s.id !== subId && s.id < 999999000);
               return [...withoutInterim, {
                 id: subId,
                 speaker: user?.full_name || 'Educator',
@@ -225,7 +242,7 @@ export const LectureStudio: React.FC = () => {
               if (isSessionActiveRef.current && recognitionRef.current) {
                 try { recognitionRef.current.start(); } catch (err) {}
               }
-            }, 20);
+            }, 10);
           }
         } else {
           setIsSttActive(false);
