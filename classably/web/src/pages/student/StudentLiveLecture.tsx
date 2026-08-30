@@ -1194,14 +1194,20 @@ export const StudentLiveLecture: React.FC = () => {
               </div>
             )}
 
-            {/* Netflix Style CC Subtitle Overlay */}
+            {/* Netflix Style CC Subtitle Overlay - Positioned in Lower-Middle Area of Video Frame & Centered */}
             {sessionStatus === 'ACTIVE' && isCcEnabled && activeSubtitleText && (
-              <div className={`absolute ${subtitlePosition === 'top' ? 'top-14 sm:top-16' : 'bottom-6 sm:bottom-10'} left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-xl pointer-events-none transition-all duration-150 animate-fade-in px-1`}>
-                <div className="bg-black/90 backdrop-blur-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-white/15 shadow-2xl flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-150 text-center max-w-full">
+              <div
+                className={`absolute ${
+                  subtitlePosition === 'top' ? 'top-[16%] sm:top-[18%]' : 'bottom-[16%] sm:bottom-[18%] md:bottom-[20%]'
+                } inset-x-0 z-30 flex justify-center pointer-events-none px-3 sm:px-4 animate-fade-in`}
+              >
+                <div className="bg-black/90 backdrop-blur-md px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl border border-white/20 shadow-2xl flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2.5 text-center max-w-[90%] sm:max-w-lg md:max-w-xl w-auto">
                   <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
                     CC • {getLanguageByCode(targetLang)?.name?.toUpperCase() || targetLang.toUpperCase()}
                   </span>
-                  <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} leading-snug tracking-wide drop-shadow-md break-words max-w-full`}>
+                  <p
+                    className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} leading-snug tracking-wide drop-shadow-md break-words max-w-full text-center`}
+                  >
                     {activeSubtitleText}
                   </p>
                 </div>
