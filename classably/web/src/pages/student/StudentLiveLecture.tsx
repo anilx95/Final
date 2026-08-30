@@ -9,10 +9,16 @@ import { LiveSubtitle, AIQAMessage, AILectureSummary, User, TimetableItem } from
 import { useToast } from '../../context/ToastContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
 import { useAuth } from '../../context/AuthContext';
-import { translateClientText, translateClientTextAsync, getCachedTranslation } from '../../utils/clientTranslation';
-import { SUPPORTED_LANGUAGES } from '../../utils/languages';
+import { translateClientText, translateClientTextAsync, getCachedTranslation, getOrDraftTranslation } from '../../utils/clientTranslation';
+import { SUPPORTED_LANGUAGES, getLanguageByCode } from '../../utils/languages';
+import { getStudentSelectedLanguage, setStudentSelectedLanguage } from '../../utils/sessionLanguage';
 
 import { VisualLearningEngine } from '../../components/visuals/VisualLearningEngine';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { LanguageSelector } from '../../components/ui/LanguageSelector';
+import { Modal } from '../../components/ui/Modal';
 
 export const StudentLiveLecture: React.FC = () => {
   const { addToast } = useToast();
@@ -36,9 +42,9 @@ export const StudentLiveLecture: React.FC = () => {
   const aiInputRef = useRef<HTMLInputElement | null>(null);
   const downloadsRef = useRef<HTMLDivElement | null>(null);
   const [subtitles, setSubtitles] = useState<LiveSubtitle[]>([]);
-  const [targetLang, setTargetLang] = useState('en');
+  const [targetLang, setTargetLang] = useState<string>(() => getStudentSelectedLanguage('en'));
   const [isCcEnabled, setIsCcEnabled] = useState(true);
-  const targetLangRef = useRef(targetLang);
+  const targetLangRef = useRef<string>(targetLang);
 
   // Subtitle display settings
   const [subtitleSize, setSubtitleSize] = useState<'sm' | 'md' | 'lg'>('md');
@@ -108,47 +114,63 @@ export const StudentLiveLecture: React.FC = () => {
   const handleLanguageChange = (newLang: string) => {
     setTargetLang(newLang);
     targetLangRef.current = newLang;
-    
-    // Instantly update active speaking subtitle directly in target language without showing English
-    if (lastRawEnglishSubtitleRef.current) {
+    setStudentSelectedLanguage(newLang);
+
+    // If active subtitle is currently showing on screen, update it to the new language immediately
+    if (activeSubtitleText) {
       if (newLang === 'en') {
-        setActiveSubtitleText(lastRawEnglishSubtitleRef.current);
+        setActiveSubtitleText(lastRawEnglishSubtitleRef.current || activeSubtitleText);
       } else {
-        const cached = getCachedTranslation(lastRawEnglishSubtitleRef.current, newLang);
-        if (cached) {
+        const raw = lastRawEnglishSubtitleRef.current;
+        const cached = raw ? (getCachedTranslation(raw, newLang) || getOrDraftTranslation(raw, newLang)) : null;
+        if (cached && cached !== raw) {
           setActiveSubtitleText(cached);
         }
-        translateClientTextAsync(lastRawEnglishSubtitleRef.current, newLang).then((translated) => {
-          if (targetLangRef.current === newLang && translated) {
-            setActiveSubtitleText(translated);
-          }
-        });
+        if (raw) {
+          translateClientTextAsync(raw, newLang).then((translated) => {
+            if (targetLangRef.current === newLang && translated && translated !== raw) {
+              setActiveSubtitleText(translated);
+            }
+          }).catch(() => {});
+        }
       }
     }
-    
+
     // Update transcript log entries
     if (newLang === 'en') {
       setSubtitles((prev) => prev.map((s) => ({
         ...s,
         text: s.original_text || s.text,
+        translated_text: s.original_text || s.text,
       })));
     } else {
       setSubtitles((prev) => prev.map((s) => {
-        const raw = s.original_text || s.text;
-        const cached = getCachedTranslation(raw, newLang);
+        const raw = (s.original_text || s.text || '').trim();
+        if (s.translations && s.translations[newLang] && s.translations[newLang] !== raw) {
+          return { ...s, text: s.translations[newLang], translated_text: s.translations[newLang] };
+        }
+        const cached = getCachedTranslation(raw, newLang) || getOrDraftTranslation(raw, newLang);
+        const display = (cached && cached !== raw) ? cached : (s.translated_text && s.language === newLang && s.translated_text !== raw ? s.translated_text : (cached || s.text));
         return {
           ...s,
-          text: cached || (s.translations && s.translations[newLang] ? s.translations[newLang] : s.text),
+          text: display,
+          translated_text: display,
         };
       }));
-      // Async translate all log items for target language
+      // Async translate all log items for target language so none remain in English
       subtitles.forEach((s) => {
-        const raw = s.original_text || s.text;
-        translateClientTextAsync(raw, newLang).then((translated) => {
-          if (targetLangRef.current === newLang && translated) {
-            setSubtitles((prev) => prev.map((item) => item.id === s.id ? { ...item, text: translated } : item));
-          }
-        });
+        const raw = (s.original_text || s.text || '').trim();
+        if (raw) {
+          translateClientTextAsync(raw, newLang).then((translated) => {
+            if (targetLangRef.current === newLang && translated && translated !== raw) {
+              setSubtitles((prev) => prev.map((item) =>
+                item.id === s.id || (item.original_text && item.original_text.trim() === raw)
+                  ? { ...item, text: translated, translated_text: translated }
+                  : item
+              ));
+            }
+          }).catch(() => {});
+        }
       });
     }
   };
@@ -186,7 +208,6 @@ export const StudentLiveLecture: React.FC = () => {
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
       }
-      videoRef.current.muted = true;
       videoRef.current.play().catch(() => {});
     }
 
@@ -194,7 +215,6 @@ export const StudentLiveLecture: React.FC = () => {
       if (audioRef.current.srcObject !== stream) {
         audioRef.current.srcObject = stream;
       }
-      audioRef.current.muted = true;
       audioRef.current.play().catch(() => {});
     }
 
@@ -340,6 +360,13 @@ export const StudentLiveLecture: React.FC = () => {
           setIsTeacherAway(false);
           setConnectionState('connecting');
           if (!isKickedRef.current) {
+            if (pcRef.current) {
+              pcRef.current.ontrack = null;
+              pcRef.current.onicecandidate = null;
+              pcRef.current.onconnectionstatechange = null;
+              pcRef.current.close();
+              pcRef.current = null;
+            }
             // Instantly request fresh offer from returning teacher with 0ms delay
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({
@@ -350,14 +377,57 @@ export const StudentLiveLecture: React.FC = () => {
           return;
         }
 
+        if (message.type === 'language_change' && message.language) {
+          // Teacher's language change does not force override student's own selected language
+          return;
+        }
+
+        if (message.type === 'subtitle_translation' && message.text && message.translated_text) {
+          const transLang = message.language;
+          const transText = message.translated_text;
+          const origText = (message.text || '').trim();
+          if (transLang === targetLangRef.current && transText && transText !== origText) {
+            setActiveSubtitleText(transText);
+            if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
+            subtitleClearTimerRef.current = setTimeout(() => {
+              setActiveSubtitleText(null);
+            }, 3000);
+
+            setSubtitles((prev) => {
+              const exists = prev.some(
+                (item) => item.id === message.sub_id || (item.original_text && item.original_text.trim() === origText)
+              );
+              if (exists) {
+                return prev.map((item) =>
+                  item.id === message.sub_id || (item.original_text && item.original_text.trim() === origText)
+                    ? { ...item, text: transText, translated_text: transText }
+                    : item
+                );
+              }
+              return [...prev.filter((s) => s.id !== message.sub_id && s.id < 999999000), {
+                id: message.sub_id || Date.now(),
+                speaker: 'Teacher',
+                text: transText,
+                original_text: origText,
+                translated_text: transText,
+                timestamp: new Date().toLocaleTimeString(),
+              }];
+            });
+          }
+          return;
+        }
+
         if (message.type === 'subtitle' && message.subtitle) {
           const sub = message.subtitle;
           const currentLang = targetLangRef.current;
-          const rawText = (sub.original_text || sub.text || '').trim();
+          const rawText = (sub.text || sub.original_text || '').trim();
           if (!rawText) return;
 
-          // Out-of-order packet protection
-          if (message.seq && message.seq < lastProcessedSubSeqRef.current) {
+          const isInterim = Boolean(message.is_interim);
+          const subId = sub.id || Date.now();
+
+          // Out-of-order packet protection ONLY for interim speech in continuous stream
+          if (isInterim && message.seq && message.seq < lastProcessedSubSeqRef.current && (lastProcessedSubSeqRef.current - message.seq < 500000)) {
             return;
           }
           if (message.seq) {
@@ -367,10 +437,8 @@ export const StudentLiveLecture: React.FC = () => {
           lastRawEnglishSubtitleRef.current = rawText;
           setLiveSpeechText(rawText);
 
-          const isInterim = Boolean(message.is_interim);
-          const subId = sub.id || Date.now();
-
-          if (currentLang === 'en') {
+          // ── If student selected ENGLISH: ──────────────────────────────
+          if (!currentLang || currentLang === 'en' || currentLang === 'english') {
             setActiveSubtitleText(rawText);
             if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
             subtitleClearTimerRef.current = setTimeout(() => {
@@ -395,18 +463,27 @@ export const StudentLiveLecture: React.FC = () => {
             return;
           }
 
-          // Target language is NOT English -> Seamless translated display without flashing English
-          let instantTranslation: string | null = null;
-          if (sub.translations && sub.translations[currentLang]) {
-            instantTranslation = sub.translations[currentLang];
-          } else if (sub.translated_text && sub.language === currentLang) {
-            instantTranslation = sub.translated_text;
+          // ── If student selected NON-ENGLISH (e.g. Hindi, Telugu, Tamil, French, Spanish, etc.): ───
+          // NEVER display raw English text to the student!
+          let translatedText: string | null = null;
+          if (sub.translations && sub.translations[currentLang] && sub.translations[currentLang] !== rawText) {
+            translatedText = sub.translations[currentLang];
+          } else if (sub.translated_text && sub.language === currentLang && sub.translated_text !== rawText) {
+            translatedText = sub.translated_text;
           } else {
-            instantTranslation = getCachedTranslation(rawText, currentLang);
+            const cached = getCachedTranslation(rawText, currentLang);
+            if (cached && cached !== rawText) {
+              translatedText = cached;
+            } else {
+              const draft = getOrDraftTranslation(rawText, currentLang);
+              if (draft && draft !== rawText) {
+                translatedText = draft;
+              }
+            }
           }
 
-          if (instantTranslation) {
-            setActiveSubtitleText(instantTranslation);
+          if (translatedText) {
+            setActiveSubtitleText(translatedText);
             if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
             subtitleClearTimerRef.current = setTimeout(() => {
               setActiveSubtitleText(null);
@@ -416,45 +493,69 @@ export const StudentLiveLecture: React.FC = () => {
               const newSub: LiveSubtitle = {
                 id: subId,
                 speaker: sub.speaker || 'Teacher',
-                text: instantTranslation,
-                original_text: rawText,
-                translated_text: instantTranslation,
+                text: translatedText,
+                original_text: sub.original_text || rawText,
+                translated_text: translatedText,
                 translations: sub.translations,
                 timestamp: sub.timestamp || new Date().toLocaleTimeString(),
               };
               setSubtitles((prev) => {
                 const cleanPrev = prev.filter((s) => s.id !== subId && s.id < 999999000);
+                const existsIndex = cleanPrev.findIndex(
+                  (s) => s.id === subId || (s.original_text && s.original_text.trim() === rawText)
+                );
+                if (existsIndex >= 0) {
+                  const updated = [...cleanPrev];
+                  updated[existsIndex] = {
+                    ...updated[existsIndex],
+                    text: translatedText!,
+                    original_text: rawText,
+                    translated_text: translatedText!,
+                    translations: sub.translations || updated[existsIndex].translations,
+                  };
+                  return updated;
+                }
                 return [...cleanPrev, newSub];
               });
             }
-          } else {
-            // Asynchronously fetch translation and update subtitle without showing raw English first
-            translateClientTextAsync(rawText, currentLang).then((translated) => {
-              if (targetLangRef.current === currentLang && lastRawEnglishSubtitleRef.current === rawText && translated) {
-                setActiveSubtitleText(translated);
-                if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
-                subtitleClearTimerRef.current = setTimeout(() => {
-                  setActiveSubtitleText(null);
-                }, 3000);
-              }
+          }
 
-              if (!isInterim && translated) {
-                const newSub: LiveSubtitle = {
-                  id: subId,
-                  speaker: sub.speaker || 'Teacher',
-                  text: translated,
-                  original_text: rawText,
-                  translated_text: translated,
-                  translations: sub.translations,
-                  timestamp: sub.timestamp || new Date().toLocaleTimeString(),
-                };
+          // Trigger async neural translation to guarantee accurate translation in student's selected language
+          translateClientTextAsync(rawText, currentLang).then((finalTrans) => {
+            if (finalTrans && finalTrans !== rawText && targetLangRef.current === currentLang) {
+              setActiveSubtitleText(finalTrans);
+              if (subtitleClearTimerRef.current) clearTimeout(subtitleClearTimerRef.current);
+              subtitleClearTimerRef.current = setTimeout(() => {
+                setActiveSubtitleText(null);
+              }, 3000);
+
+              if (!isInterim) {
                 setSubtitles((prev) => {
-                  const cleanPrev = prev.filter((s) => s.id !== subId && s.id < 999999000);
-                  return [...cleanPrev, newSub];
+                  const exists = prev.some(
+                    (s) => s.id === subId || (s.original_text && s.original_text.trim() === rawText)
+                  );
+                  if (exists) {
+                    return prev.map((item) =>
+                      item.id === subId || (item.original_text && item.original_text.trim() === rawText)
+                        ? { ...item, text: finalTrans, translated_text: finalTrans }
+                        : item
+                    );
+                  }
+                  const newSub: LiveSubtitle = {
+                    id: subId,
+                    speaker: sub.speaker || 'Teacher',
+                    text: finalTrans,
+                    original_text: rawText,
+                    translated_text: finalTrans,
+                    translations: sub.translations,
+                    timestamp: sub.timestamp || new Date().toLocaleTimeString(),
+                  };
+                  return [...prev.filter((s) => s.id !== subId && s.id < 999999000), newSub];
                 });
               }
-            }).catch(() => {});
-          }
+            }
+          }).catch(() => {});
+
           return;
         }
 
@@ -680,24 +781,52 @@ export const StudentLiveLecture: React.FC = () => {
       try {
         const res = await lectureApi.getSubtitles(sessionId, targetLang);
         if (isMountedRef.current && Array.isArray(res.data)) {
+          const currentLang = targetLangRef.current;
           const formatted = res.data.map((s: any) => {
+            const raw = (s.original_text || s.text || '').trim();
             let displayText = s.text;
-            if (targetLang !== 'en' && s.original_text) {
-              const cached = getCachedTranslation(s.original_text, targetLang);
-              if (cached) {
-                displayText = cached;
-              } else if (s.translated_text && s.language === targetLang) {
+            if (currentLang !== 'en' && raw) {
+              if (s.translations && s.translations[currentLang] && s.translations[currentLang] !== raw) {
+                displayText = s.translations[currentLang];
+              } else if (s.translated_text && s.language === currentLang && s.translated_text !== raw) {
                 displayText = s.translated_text;
+              } else {
+                const cached = getCachedTranslation(raw, currentLang) || getOrDraftTranslation(raw, currentLang);
+                if (cached && cached !== raw) {
+                  displayText = cached;
+                } else {
+                  translateClientTextAsync(raw, currentLang).then((t) => {
+                    if (t && t !== raw && targetLangRef.current === currentLang) {
+                      setSubtitles((prev) => prev.map((item) =>
+                        item.id === s.id || (item.original_text && item.original_text.trim() === raw)
+                          ? { ...item, text: t, translated_text: t }
+                          : item
+                      ));
+                    }
+                  }).catch(() => {});
+                }
               }
             }
-            return { ...s, text: displayText };
+            return { ...s, text: displayText, original_text: raw, translated_text: displayText };
           });
           setSubtitles((prev) => {
-            if (formatted.length === 0) return [];
-            const map = new Map<number, LiveSubtitle>();
-            prev.forEach((s) => map.set(s.id, s));
-            formatted.forEach((s: LiveSubtitle) => map.set(s.id, s));
-            return Array.from(map.values());
+            if (formatted.length === 0) return prev;
+            const map = new Map<string, LiveSubtitle>();
+            prev.forEach((s) => {
+              const key = (s.original_text || s.text || '').trim();
+              if (key) map.set(key, s);
+            });
+            formatted.forEach((s: LiveSubtitle) => {
+              const key = (s.original_text || s.text || '').trim();
+              if (key) {
+                const existing = map.get(key);
+                const preserveTranslated = (currentLang !== 'en' && existing && existing.text && existing.text !== key)
+                  ? existing.text
+                  : s.text;
+                map.set(key, existing ? { ...existing, ...s, text: preserveTranslated, translated_text: preserveTranslated, translations: existing.translations || s.translations } : s);
+              }
+            });
+            return Array.from(map.values()).sort((a, b) => (a.id || 0) - (b.id || 0));
           });
         }
       } catch {}
@@ -837,38 +966,37 @@ export const StudentLiveLecture: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Compact Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 px-4 rounded-xl">
+      {/* Top Header Bar */}
+      <Card variant="default" padding="sm" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-          <span className={`w-2.5 h-2.5 rounded-full ${sessionStatus === 'ACTIVE' ? 'bg-emerald-500 animate-ping' : sessionStatus === 'ENDED' ? 'bg-purple-500' : 'bg-rose-500'}`} />
-          <h1 className="text-base sm:text-lg font-black text-slate-100 truncate">Live Classroom</h1>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-            sessionStatus === 'ACTIVE'
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-              : sessionStatus === 'ENDED'
-              ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
-              : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-          }`}>
+          <span className={`w-2.5 h-2.5 rounded-full ${sessionStatus === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : sessionStatus === 'ENDED' ? 'bg-purple-500' : 'bg-rose-500'}`} />
+          <h1 className="text-base sm:text-lg font-bold text-slate-100 truncate tracking-tight">Live Classroom</h1>
+          <Badge
+            variant={sessionStatus === 'ACTIVE' ? 'success' : sessionStatus === 'ENDED' ? 'ai' : 'danger'}
+            size="sm"
+            dot
+            pulse={sessionStatus === 'ACTIVE'}
+          >
             {sessionStatus === 'ACTIVE'
               ? (sessionId ? `SESSION #${sessionId} • LIVE` : 'LIVE')
               : sessionStatus === 'ENDED'
               ? 'CLASS ENDED'
               : 'TEACHER OFFLINE'}
-          </span>
+          </Badge>
           {sessionStatus === 'ACTIVE' && sessionSubject && (
-            <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30 truncate">
+            <Badge variant="brand" size="sm" className="truncate max-w-[200px] sm:max-w-none">
               {sessionSubject} {sessionTopic ? `— ${sessionTopic}` : ''}
-            </span>
+            </Badge>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${connBadge.color}`}>
             {connBadge.label}
           </span>
 
           {/* Audio Control */}
-          <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-2 bg-[#080c14] px-2.5 py-1 rounded-lg border border-[#1b2538]">
             <button
               onClick={toggleAudioMute}
               className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold transition-all cursor-pointer ${
@@ -891,29 +1019,21 @@ export const StudentLiveLecture: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
-            <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-            <select
-              value={targetLang}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none max-w-[150px] sm:max-w-[210px] cursor-pointer font-medium"
-              title="Select subtitle translation language"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code} className="bg-slate-900 text-slate-200">
-                  {lang.name} {lang.nativeName && lang.nativeName !== lang.name ? `(${lang.nativeName})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          <LanguageSelector
+            selectedLanguage={targetLang}
+            onLanguageChange={handleLanguageChange}
+            size="sm"
+          />
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Video & Transcript */}
         <div className="lg:col-span-2 space-y-6">
-          <div
-            className="card p-0 overflow-hidden relative bg-black h-80 sm:h-[440px] lg:h-[490px] flex items-center justify-center rounded-2xl border border-slate-800 shadow-2xl"
+          <Card
+            variant="default"
+            padding="none"
+            className="overflow-hidden relative bg-black h-80 sm:h-[440px] lg:h-[490px] flex items-center justify-center rounded-2xl shadow-2xl cursor-pointer"
             onClick={() => isAudioMuted && hasAudio && handleUnmute()}
           >
             <video
@@ -924,79 +1044,83 @@ export const StudentLiveLecture: React.FC = () => {
             {isAudioMuted && sessionStatus === 'ACTIVE' && !isKicked && !isTeacherAway && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleUnmute(); }}
-                className="absolute top-4 right-4 z-30 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-4 py-2 rounded-xl flex items-center gap-2 shadow-xl animate-pulse text-xs cursor-pointer pointer-events-auto"
+                className="absolute top-4 right-4 z-30 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-xl animate-pulse text-xs cursor-pointer pointer-events-auto"
               >
                 <Volume2 className="w-4 h-4" /> Tap to Unmute Audio
               </button>
             )}
 
             {isKicked ? (
-              <div className="text-center space-y-4 z-10 p-6 max-w-md bg-slate-950/95 border border-rose-500/50 rounded-2xl shadow-2xl backdrop-blur-md animate-fade-in">
-                <div className="w-16 h-16 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 mx-auto shadow-lg shadow-rose-500/10">
-                  <Shield className="w-8 h-8 text-rose-400" />
+              <div className="text-center space-y-4 z-10 p-6 max-w-md bg-[#080c14]/95 border border-rose-500/50 rounded-2xl shadow-2xl backdrop-blur-md animate-fade-in">
+                <div className="w-14 h-14 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 mx-auto shadow-lg shadow-rose-500/10">
+                  <Shield className="w-7 h-7 text-rose-400" />
                 </div>
                 <div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/30 shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/30">
                     Access Revoked
                   </span>
-                  <h3 className="text-xl font-black text-slate-100 mt-3 tracking-wide">Removed From Class</h3>
-                  <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-                    You have been removed from this live lecture session by the teacher. You cannot rejoin this active session.
+                  <h3 className="text-lg font-bold text-slate-100 mt-2.5 tracking-tight">Removed From Class</h3>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    You have been removed from this live lecture session by the educator.
                   </p>
                 </div>
               </div>
             ) : sessionStatus === 'ENDED' || sessionStatus === 'OFFLINE' ? (
-              <div className="text-center space-y-4 z-10 p-6 max-w-md bg-slate-950/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-md">
-                <div className="w-16 h-16 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mx-auto shadow-lg shadow-purple-500/10">
-                  <VideoOff className="w-8 h-8 text-purple-400" />
+              <div className="text-center space-y-4 z-10 p-6 max-w-md bg-[#080c14]/90 border border-[#1b2538] rounded-2xl shadow-2xl backdrop-blur-md">
+                <div className="w-14 h-14 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mx-auto shadow-lg shadow-purple-500/10">
+                  <VideoOff className="w-7 h-7 text-purple-400" />
                 </div>
                 <div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-purple-400 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/30 shadow-sm">
+                  <Badge variant="ai" size="sm">
                     Class Ended
-                  </span>
-                  <h3 className="text-xl font-black text-slate-100 mt-3 tracking-wide">Class Ended</h3>
-                  <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                    This live classroom session has ended. Check recordings or AI assistant below for study notes.
+                  </Badge>
+                  <h3 className="text-lg font-bold text-slate-100 mt-2.5 tracking-tight">Live Session Completed</h3>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    This live classroom session has concluded. Check lecture artifacts or ask the AI assistant below for study notes.
                   </p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-2 pt-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => {
                       if (downloadsRef.current) downloadsRef.current.scrollIntoView({ behavior: 'smooth' });
                     }}
-                    className="btn-secondary text-xs border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+                    leftIcon={<Download className="w-3.5 h-3.5 text-sky-400" />}
                   >
-                    <Download className="w-4 h-4 text-sky-400" /> Lecture Recordings
-                  </button>
-                  <button
+                    Lecture Artifacts
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={() => {
                       if (aiInputRef.current) aiInputRef.current.focus();
                     }}
-                    className="btn-primary text-xs"
+                    leftIcon={<Sparkles className="w-3.5 h-3.5" />}
                   >
-                    <Sparkles className="w-4 h-4" /> Ask AI Question
-                  </button>
+                    Ask AI Question
+                  </Button>
                 </div>
               </div>
             ) : isTeacherAway && sessionStatus === 'ACTIVE' ? (
               /* Blurred Placeholder when Teacher Temporarily Steps Away */
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-slate-950/85 backdrop-blur-xl border border-amber-500/30 text-center animate-fade-in">
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-[#080c14]/85 backdrop-blur-xl border border-amber-500/30 text-center animate-fade-in">
                 <div className="relative mb-3">
-                  <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-400/40 flex items-center justify-center text-amber-300 shadow-xl shadow-amber-500/20">
-                    <Radio className="w-8 h-8 animate-pulse text-amber-400" />
+                  <div className="w-14 h-14 rounded-full bg-amber-500/10 border-2 border-amber-400/40 flex items-center justify-center text-amber-300 shadow-xl shadow-amber-500/20">
+                    <Radio className="w-7 h-7 animate-pulse text-amber-400" />
                   </div>
-                  <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-amber-500 border-2 border-slate-950 flex items-center justify-center">
+                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-slate-950 flex items-center justify-center">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping" />
                   </span>
                 </div>
 
                 <div className="max-w-md space-y-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
-                    <Clock className="w-3.5 h-3.5" />
+                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider font-mono">
+                    <Clock className="w-3 h-3" />
                     <span>Educator Stepped Away Temporarily</span>
                   </div>
 
-                  <h3 className="text-base font-black text-slate-100 tracking-wide">
+                  <h3 className="text-sm font-bold text-slate-100 tracking-tight">
                     Live Lecture in Progress
                   </h3>
 
@@ -1013,10 +1137,10 @@ export const StudentLiveLecture: React.FC = () => {
             ) : (
               !hasVideo && (
                 <div className="text-center space-y-3 z-10">
-                  <div className="w-16 h-16 rounded-full bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 mx-auto">
-                    <Video className="w-8 h-8 animate-pulse" />
+                  <div className="w-14 h-14 rounded-2xl bg-[#0d131f] border border-[#1b2538] flex items-center justify-center text-sky-400 mx-auto">
+                    <Video className="w-7 h-7 animate-pulse" />
                   </div>
-                  <p className="text-xs text-slate-300 font-semibold">
+                  <p className="text-xs text-slate-300 font-medium">
                     {connectionState === 'reconnecting' ? 'Reconnecting...' : connectionState === 'disconnected' ? 'Connecting to live feed...' : 'Waiting for teacher video stream...'}
                   </p>
                   {(connectionState === 'reconnecting' || connectionState === 'failed') && (
@@ -1030,14 +1154,14 @@ export const StudentLiveLecture: React.FC = () => {
 
             {/* CC Controls Overlay */}
             {sessionStatus === 'ACTIVE' && (
-              <div className="absolute top-4 left-4 z-30 flex items-center gap-2 pointer-events-auto">
+              <div className="absolute top-3.5 left-3.5 z-30 flex items-center gap-2 pointer-events-auto">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setIsCcEnabled(!isCcEnabled); }}
-                  className={`px-3 py-1 rounded-xl text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1.5 shadow-lg ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1.5 shadow-lg ${
                     isCcEnabled
-                      ? 'bg-white/20 text-white border-white/40 shadow-white/10 hover:bg-white/30'
-                      : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-slate-200'
+                      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-yellow-500/10 hover:bg-yellow-500/30'
+                      : 'bg-[#0d131f]/80 text-slate-400 border-[#1b2538] hover:text-slate-200'
                   }`}
                 >
                   <span className="text-xs font-black font-mono">CC</span>
@@ -1045,13 +1169,13 @@ export const StudentLiveLecture: React.FC = () => {
                 </button>
 
                 {/* Subtitle Size */}
-                <div className="flex items-center gap-0.5 backdrop-blur-md bg-slate-900/70 rounded-lg border border-slate-700 p-0.5">
+                <div className="flex items-center gap-0.5 backdrop-blur-md bg-[#0d131f]/80 rounded-lg border border-[#1b2538] p-0.5">
                   {(['sm', 'md', 'lg'] as const).map((size) => (
                     <button
                       key={size}
                       onClick={(e) => { e.stopPropagation(); setSubtitleSize(size); }}
                       className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                        subtitleSize === size ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white'
+                        subtitleSize === size ? 'bg-sky-500/30 text-sky-300' : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       {size === 'sm' ? 'S' : size === 'md' ? 'M' : 'L'}
@@ -1062,7 +1186,7 @@ export const StudentLiveLecture: React.FC = () => {
                 {/* Position Toggle */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setSubtitlePosition(subtitlePosition === 'bottom' ? 'top' : 'bottom'); }}
-                  className="backdrop-blur-md bg-slate-900/70 rounded-lg border border-slate-700 p-1 text-slate-400 hover:text-white transition-all"
+                  className="backdrop-blur-md bg-[#0d131f]/80 rounded-lg border border-[#1b2538] p-1 text-slate-400 hover:text-white transition-all"
                   title="Toggle subtitle position"
                 >
                   {subtitlePosition === 'bottom' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -1070,17 +1194,20 @@ export const StudentLiveLecture: React.FC = () => {
               </div>
             )}
 
-            {/* Netflix Style CC Subtitle Overlay — Centered near bottom, comfortably above edge */}
+            {/* Netflix Style CC Subtitle Overlay */}
             {sessionStatus === 'ACTIVE' && isCcEnabled && activeSubtitleText && (
-              <div className="absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none transition-all duration-150 animate-fade-in">
-                <div className="bg-black/80 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-white/15 shadow-2xl flex items-center justify-center text-center transition-all duration-150">
+              <div className={`absolute ${subtitlePosition === 'top' ? 'top-14 sm:top-16' : 'bottom-10 sm:bottom-12'} left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none transition-all duration-150 animate-fade-in`}>
+                <div className="bg-black/85 backdrop-blur-sm px-4.5 py-2 rounded-xl border border-white/15 shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-150">
+                  <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
+                    CC • {getLanguageByCode(targetLang)?.name?.toUpperCase() || targetLang.toUpperCase()}
+                  </span>
                   <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} text-center leading-snug tracking-wide drop-shadow-md`}>
                     {activeSubtitleText}
                   </p>
                 </div>
               </div>
             )}
-          </div>
+          </Card>
 
           {/* Audio Element (hidden) */}
           <audio ref={audioRef} autoPlay playsInline muted={isAudioMuted} className="hidden" />
@@ -1106,49 +1233,65 @@ export const StudentLiveLecture: React.FC = () => {
           </div>
 
           {/* Auto-Read Toggle */}
-          <div className="flex items-center justify-between card p-3 bg-slate-900/60 border border-slate-800">
+          <Card variant="default" padding="sm" className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-400" />
               <span className="text-xs font-semibold text-slate-200">Auto-Read Subtitles (TTS)</span>
             </div>
             <button
               onClick={() => setAutoReadSubtitles((v) => !v)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${autoReadSubtitles ? 'bg-purple-500' : 'bg-slate-700'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${autoReadSubtitles ? 'bg-sky-500' : 'bg-slate-700'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${autoReadSubtitles ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
-          </div>
+          </Card>
 
           {/* Transcript Log */}
-          <div className="card space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+          <Card variant="default" className="space-y-3">
+            <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
+              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
                 <Volume2 className="w-4 h-4 text-sky-400" /> Live Transcript
               </h3>
-              <span className="text-[10px] font-bold text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+              <Badge variant="neutral" size="sm">
                 {subtitles.length} entries
-              </span>
+              </Badge>
             </div>
             <div ref={subtitleContainerRef} className="space-y-2 max-h-60 overflow-y-auto">
               {subtitles.length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center">Waiting for teacher to speak...</p>
+                <p className="text-xs text-slate-500 py-6 text-center">Waiting for teacher to speak...</p>
               ) : (
-                subtitles.map((sub) => (
-                  <div key={sub.id} className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
-                    <span className="font-bold text-sky-400">{sub.speaker}: </span>
-                    <span className="text-slate-200">{sub.text}</span>
-                  </div>
-                ))
+                subtitles.map((sub) => {
+                  const raw = (sub.original_text || sub.text || '').trim();
+                  let displayText = sub.text;
+                  if (targetLang !== 'en' && raw) {
+                    if (sub.translations && sub.translations[targetLang] && sub.translations[targetLang] !== raw) {
+                      displayText = sub.translations[targetLang];
+                    } else if (sub.translated_text && sub.translated_text !== raw) {
+                      displayText = sub.translated_text;
+                    } else {
+                      const cached = getCachedTranslation(raw, targetLang) || getOrDraftTranslation(raw, targetLang);
+                      if (cached && cached !== raw) {
+                        displayText = cached;
+                      }
+                    }
+                  }
+                  return (
+                    <div key={sub.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] text-xs">
+                      <span className="font-bold text-sky-400 font-mono text-[11px]">{sub.speaker}: </span>
+                      <span className="text-slate-200">{displayText}</span>
+                    </div>
+                  );
+                })
               )}
             </div>
-          </div>
+          </Card>
 
           {/* Summarize Button */}
-          <div className="card p-4 bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-slate-900 border-indigo-500/30">
+          <Card variant="ai" className="p-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-indigo-300 text-sm flex items-center gap-2">
-                  <Brain className="w-4 h-4" /> AI Class Summary
+                <h3 className="font-bold text-indigo-300 text-sm flex items-center gap-2 tracking-tight">
+                  <Brain className="w-4 h-4" /> AI Lecture Summary
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">Generate an AI-powered summary of this lecture</p>
               </div>
@@ -1156,42 +1299,44 @@ export const StudentLiveLecture: React.FC = () => {
                 <select
                   value={summaryStyle}
                   onChange={(e) => setSummaryStyle(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none"
+                  className="bg-[#080c14] border border-[#1b2538] rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none"
                 >
                   <option value="concise">Concise</option>
                   <option value="detailed">Detailed</option>
                   <option value="study_notes">Study Notes</option>
                   <option value="bullet_points">Bullet Points</option>
                 </select>
-                <button
+                <Button
                   onClick={handleSummarize}
                   disabled={isSummarizing}
-                  className="btn-primary text-xs"
+                  isLoading={isSummarizing}
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Brain className="w-3.5 h-3.5" />}
                 >
-                  {isSummarizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
                   {isSummarizing ? 'Generating...' : 'Summarize'}
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Right 1 Col: AI Chat, Raise Hand, Downloads */}
         <div className="space-y-6">
-          {/* ChatGPT-Style AI Q&A Chat Panel */}
-          <div className="card space-y-3 border-sky-500/20 shadow-xl bg-slate-900/90">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          {/* AI Q&A Chat Panel */}
+          <Card variant="default" className="space-y-3 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-sm">
                   <Brain className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-100 text-sm flex items-center gap-1.5">
+                  <h3 className="font-bold text-slate-100 text-xs sm:text-sm tracking-tight">
                     AI Classroom Assistant
                   </h3>
                   <p className="text-[10px] text-emerald-400 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    ChatGPT-Style Live Doubt Solver
+                    Live Doubt Solver
                   </p>
                 </div>
               </div>
@@ -1200,10 +1345,10 @@ export const StudentLiveLecture: React.FC = () => {
                   <button
                     onClick={handleClearHistory}
                     title="Clear chat history"
-                    className="flex items-center gap-1 text-[11px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-lg transition-all"
+                    className="flex items-center gap-1 text-[10px] font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md transition-all"
                   >
                     <Trash2 className="w-3 h-3" />
-                    <span>Clear History</span>
+                    <span>Clear</span>
                   </button>
                 )}
                 <button
@@ -1232,21 +1377,21 @@ export const StudentLiveLecture: React.FC = () => {
                   ) : (
                     aiMessages.map((msg) => (
                       <div key={msg.id} className="space-y-2 animate-fade-in">
-                        {/* Student question — Right aligned */}
+                        {/* Student question */}
                         <div className="flex justify-end items-start gap-2">
                           <div className="max-w-[85%] bg-sky-600 text-white rounded-2xl rounded-tr-sm px-3.5 py-2 text-xs shadow-md">
                             {msg.question}
                           </div>
                         </div>
 
-                        {/* AI answer — Left aligned ChatGPT style */}
+                        {/* AI answer */}
                         {msg.answer ? (
                           <div className="flex justify-start items-start gap-2">
                             <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-indigo-500 to-sky-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0 mt-0.5 shadow-sm">
                               AI
                             </div>
-                            <div className="max-w-[88%] bg-slate-800/90 border border-slate-700/80 rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs text-slate-200 shadow-lg space-y-1">
-                              <div className="text-[10px] font-extrabold text-sky-400 uppercase tracking-wider">
+                            <div className="max-w-[88%] bg-[#080c14] border border-[#1b2538] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs text-slate-200 shadow-lg space-y-1">
+                              <div className="text-[9px] font-bold text-sky-400 uppercase tracking-wider font-mono">
                                 ClassAbly AI
                               </div>
                               <div className="whitespace-pre-wrap leading-relaxed">
@@ -1259,10 +1404,10 @@ export const StudentLiveLecture: React.FC = () => {
                             <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-indigo-500 to-sky-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm">
                               AI
                             </div>
-                            <div className="flex items-center gap-1.5 text-xs text-sky-300 font-medium py-1.5 px-3 bg-slate-800/80 border border-slate-700 rounded-2xl">
-                              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-                              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse delay-75" />
-                              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse delay-150" />
+                            <div className="flex items-center gap-1.5 text-xs text-sky-300 font-medium py-1.5 px-3 bg-[#080c14] border border-[#1b2538] rounded-2xl">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse delay-75" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse delay-150" />
                               <span className="ml-1 text-[11px] text-slate-400">AI Assistant is thinking...</span>
                             </div>
                           </div>
@@ -1274,18 +1419,18 @@ export const StudentLiveLecture: React.FC = () => {
                 </div>
 
                 {/* Quick Suggestion Chips */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-800/60">
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-[#1b2538]">
                   {[
-                    '💡 Key Concept',
-                    '📝 Step-by-Step Derivation',
-                    '🎯 Core Formula',
-                    '❓ Example Problem',
+                    'Key Concept',
+                    'Step-by-Step Derivation',
+                    'Core Formula',
+                    'Example Problem',
                   ].map((chip) => (
                     <button
                       key={chip}
                       type="button"
-                      onClick={() => setAiQuestion(chip.replace(/^[^\w]+/, '').trim())}
-                      className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700 transition-all cursor-pointer"
+                      onClick={() => setAiQuestion(chip)}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-[#080c14] hover:bg-sky-500/15 text-slate-300 hover:text-sky-300 border border-[#1b2538] transition-all cursor-pointer font-medium"
                     >
                       {chip}
                     </button>
@@ -1301,42 +1446,44 @@ export const StudentLiveLecture: React.FC = () => {
                     value={aiQuestion}
                     onChange={(e) => setAiQuestion(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
-                    className="input-field text-xs flex-1 rounded-xl bg-slate-950 border-slate-800 focus:border-sky-500"
+                    className="input-field text-xs flex-1"
                     disabled={isAiLoading}
                   />
-                  <button
+                  <Button
                     onClick={handleAskAI}
                     disabled={!aiQuestion.trim() || isAiLoading}
-                    className="btn-primary text-xs px-3.5 rounded-xl flex items-center justify-center"
+                    variant="primary"
+                    size="sm"
+                    className="px-3"
                   >
-                    {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </button>
+                    {isAiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  </Button>
                 </div>
               </>
             )}
-          </div>
+          </Card>
 
           {/* Raise Hand Panel */}
-          <div className="card space-y-4">
-            <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+          <Card variant="default" className="space-y-3.5">
+            <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
               <Hand className="w-4 h-4 text-amber-400" /> Raise Hand / Ask Teacher
             </h3>
 
             {/* Category Selector */}
             <div className="flex flex-wrap gap-1.5">
               {[
-                { value: 'doubt', label: '❓ Doubt' },
-                { value: 'clarification', label: '🔍 Clarification' },
-                { value: 'example', label: '📝 Example' },
-                { value: 'other', label: '💬 Other' },
+                { value: 'doubt', label: 'Doubt' },
+                { value: 'clarification', label: 'Clarification' },
+                { value: 'example', label: 'Example' },
+                { value: 'other', label: 'Other' },
               ].map((cat) => (
                 <button
                   key={cat.value}
                   onClick={() => setQuestionCategory(cat.value)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
                     questionCategory === cat.value
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200'
+                      : 'bg-[#080c14] text-slate-400 border border-[#1b2538] hover:text-slate-200'
                   }`}
                 >
                   {cat.label}
@@ -1351,20 +1498,27 @@ export const StudentLiveLecture: React.FC = () => {
                 value={questionText}
                 onChange={(e) => setQuestionText(e.target.value)}
                 maxLength={500}
-                className="input-field text-xs"
+                className="input-field text-xs resize-none"
               />
-              <span className="absolute bottom-2 right-2 text-[10px] text-slate-500">
+              <span className="absolute bottom-2 right-2 text-[10px] text-slate-500 font-mono">
                 {questionText.length}/500
               </span>
             </div>
 
-            <button onClick={handleRaiseHand} className="btn-primary w-full text-xs" disabled={isHandRaised}>
-              <Hand className="w-4 h-4" /> {isHandRaised ? 'Hand Raised ✓' : 'Raise Hand'}
-            </button>
+            <Button
+              onClick={handleRaiseHand}
+              variant="primary"
+              size="sm"
+              className="w-full"
+              disabled={isHandRaised}
+              leftIcon={<Hand className="w-3.5 h-3.5" />}
+            >
+              {isHandRaised ? 'Hand Raised' : 'Raise Hand'}
+            </Button>
 
             {isHandRaised && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>Your question is queued for the teacher.</span>
               </div>
             )}
@@ -1377,11 +1531,11 @@ export const StudentLiveLecture: React.FC = () => {
                 Lower hand
               </button>
             )}
-          </div>
+          </Card>
 
           {/* Downloads */}
-          <div ref={downloadsRef} id="recordings-section" className="card space-y-3 border-sky-500/30">
-            <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+          <Card ref={downloadsRef} id="recordings-section" variant="default" className="space-y-3">
+            <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
               <Download className="w-4 h-4 text-sky-400" /> Lecture Downloads & Recordings
             </h3>
 
@@ -1409,38 +1563,29 @@ export const StudentLiveLecture: React.FC = () => {
                 </a>
               </div>
             ) : (
-              <p className="text-xs text-slate-500 py-3 text-center">No active class session recordings available.</p>
+              <p className="text-xs text-slate-500 py-4 text-center">No active class session recordings available.</p>
             )}
-          </div>
+          </Card>
         </div>
       </div>
 
       {/* Summary Modal */}
-      {showSummary && summaryData && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowSummary(false)}>
-          <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-extrabold text-indigo-300 flex items-center gap-2">
-                <Brain className="w-5 h-5" /> AI Lecture Summary
-              </h2>
-              <button onClick={() => setShowSummary(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-              Style: {summaryData.style} • Generated {summaryData.created_at}
-            </div>
-
-            <div className="prose prose-sm prose-invert max-w-none">
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">
-                {summaryData.summary_text}
-              </div>
+      <Modal
+        isOpen={showSummary && !!summaryData}
+        onClose={() => setShowSummary(false)}
+        title="AI Lecture Summary"
+        description={summaryData ? `Style: ${summaryData.style} • Generated ${summaryData.created_at}` : ''}
+        size="lg"
+      >
+        {summaryData && (
+          <div className="space-y-4">
+            <div className="bg-[#080c14] border border-[#1b2538] rounded-xl p-4 text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">
+              {summaryData.summary_text}
             </div>
 
             {(summaryData.key_points || []).length > 0 && (
               <div>
-                <h4 className="text-sm font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
+                <h4 className="text-xs sm:text-sm font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4" /> Key Points
                 </h4>
                 <ul className="space-y-1.5">
@@ -1456,12 +1601,12 @@ export const StudentLiveLecture: React.FC = () => {
 
             {(summaryData.definitions || []).length > 0 && (
               <div>
-                <h4 className="text-sm font-bold text-sky-400 mb-2 flex items-center gap-1.5">
+                <h4 className="text-xs sm:text-sm font-bold text-sky-400 mb-2 flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4" /> Definitions
                 </h4>
                 <div className="space-y-1.5">
                   {(summaryData.definitions || []).map((d, i) => (
-                    <div key={i} className="text-xs text-slate-300 bg-slate-950 p-2 rounded-lg border border-slate-800">{d}</div>
+                    <div key={i} className="text-xs text-slate-300 bg-[#080c14] p-2 rounded-lg border border-[#1b2538]">{d}</div>
                   ))}
                 </div>
               </div>
@@ -1469,19 +1614,19 @@ export const StudentLiveLecture: React.FC = () => {
 
             {(summaryData.formulas || []).length > 0 && (
               <div>
-                <h4 className="text-sm font-bold text-amber-400 mb-2 flex items-center gap-1.5">
+                <h4 className="text-xs sm:text-sm font-bold text-amber-400 mb-2 flex items-center gap-1.5">
                   <FileText className="w-4 h-4" /> Formulas
                 </h4>
                 <div className="space-y-1.5">
                   {(summaryData.formulas || []).map((f, i) => (
-                    <div key={i} className="text-xs text-amber-200 font-mono bg-slate-950 p-2 rounded-lg border border-amber-500/20">{f}</div>
+                    <div key={i} className="text-xs text-amber-200 font-mono bg-[#080c14] p-2 rounded-lg border border-amber-500/20">{f}</div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };

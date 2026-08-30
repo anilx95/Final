@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
 import { authApi } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { Button } from '../../components/ui/Button';
 
 export const ForgotPassword: React.FC = () => {
   const { addToast } = useToast();
@@ -35,9 +36,9 @@ export const ForgotPassword: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-6 sm:p-8 shadow-2xl">
           <Link to="/login" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Sign In
           </Link>
@@ -46,7 +47,7 @@ export const ForgotPassword: React.FC = () => {
             <KeyRound className="w-6 h-6" />
           </div>
 
-          <h2 className="text-xl font-bold text-slate-100">Forgot Password?</h2>
+          <h2 className="text-xl font-bold text-slate-100 tracking-tight">Forgot Password?</h2>
           <p className="text-xs text-slate-400 mt-1 mb-6">
             Enter your university email address below to receive password recovery instructions.
           </p>
@@ -62,29 +63,32 @@ export const ForgotPassword: React.FC = () => {
                   placeholder="name@university.edu"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="input-field pl-10"
+                  className="input-field pl-10 text-xs"
                 />
               </div>
             </div>
 
-            <button type="submit" disabled={isSubmitting} className="btn-primary w-full">
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                'Generate Reset Token'
-              )}
-            </button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              isLoading={isSubmitting}
+              variant="primary"
+              size="md"
+              className="w-full"
+            >
+              Generate Reset Token
+            </Button>
           </form>
 
           {resetToken && (
-            <div className="mt-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs animate-fade-in">
-              <div className="flex items-center gap-2 font-bold mb-1 text-emerald-200">
+            <div className="mt-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs animate-fade-in space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-200">
                 <CheckCircle2 className="w-4 h-4" /> Password Reset Token Active
               </div>
-              <p className="text-slate-300 text-[11px] mb-2">Token: <code className="bg-slate-950 px-2 py-0.5 rounded text-sky-300">{resetToken}</code></p>
+              <p className="text-slate-300 text-[11px]">Token: <code className="bg-[#080c14] px-2 py-0.5 rounded text-sky-300 font-mono">{resetToken}</code></p>
               <Link
                 to={`/reset-password?token=${resetToken}`}
-                className="btn-secondary w-full text-center text-xs py-1.5 inline-block"
+                className="btn-secondary w-full text-center text-xs py-2 inline-block"
               >
                 Proceed to Reset Password
               </Link>

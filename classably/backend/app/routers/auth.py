@@ -81,7 +81,8 @@ def send_otp(
     otp_code = email_otp_service.generate_otp(email_clean, purpose, db=db)
     email_sent = email_otp_service.send_otp_email(email_clean, otp_code, purpose)
 
-    if not email_sent and not (settings.DEBUG or settings.MOCK_EMAIL_IN_DEV):
+    if not email_sent and not settings.MOCK_EMAIL_IN_DEV:
+        email_otp_service.invalidate_failed_otp(email_clean, purpose, db=db)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to dispatch verification email via Gmail SMTP. Please verify email address and try again.",
@@ -91,7 +92,7 @@ def send_otp(
         "success": True,
         "message": f"Verification code sent to {email_clean}. Please check your inbox.",
         "email": email_clean,
-        "cooldown_seconds": 60,
+        "cooldown_seconds": settings.OTP_COOLDOWN_SECONDS,
         "email_dispatched": email_sent,
     }
     if settings.DEBUG or settings.MOCK_EMAIL_IN_DEV:
@@ -130,10 +131,18 @@ def register_with_otp(
     """Verify Gmail OTP and create account atomically."""
     email_clean = request.email.lower().strip()
 
+    # 0. Validate OTP format (must be exactly 6 digits)
+    otp_clean = request.otp.strip()
+    if not otp_clean or len(otp_clean) != 6 or not otp_clean.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP must be exactly 6 digits.",
+        )
+
     # 1. Strictly verify and consume OTP
     is_valid, err_msg = email_otp_service.verify_otp(
         email=email_clean,
-        otp_code=request.otp,
+        otp_code=otp_clean,
         purpose="register",
         consume=True,
         db=db,
@@ -144,8 +153,16 @@ def register_with_otp(
             detail=err_msg,
         )
 
-    # 2. Proceed with registration
-    return register(request=request, db=db)
+    # 2. Proceed with registration — wrap to give clear error if this step fails
+    try:
+        return register(request=request, db=db)
+    except HTTPException:
+        raise  # re-raise known HTTP errors (e.g. email already exists)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OTP verified but account creation failed: {exc}. Please request a new OTP and try again.",
+        )
 
 
 @router.post("/login-with-otp", response_model=TokenResponse)
@@ -157,10 +174,18 @@ def login_with_otp(
     """Log in using verified Gmail OTP."""
     email_clean = payload.email.lower().strip()
 
+    # 0. Validate OTP format (must be exactly 6 digits)
+    otp_clean = payload.otp.strip()
+    if not otp_clean or len(otp_clean) != 6 or not otp_clean.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP must be exactly 6 digits.",
+        )
+
     # 1. Strictly verify and consume OTP
     is_valid, err_msg = email_otp_service.verify_otp(
         email=email_clean,
-        otp_code=payload.otp,
+        otp_code=otp_clean,
         purpose="login",
         consume=True,
         db=db,
@@ -255,13 +280,17 @@ def register(
             detail="Email is already registered. Please sign in instead.",
         )
 
+    clean_phone = request.phone.strip() if request.phone and request.phone.strip() else None
+    clean_roll = request.roll_number.strip() if request.roll_number and request.roll_number.strip() else None
+    clean_emp = request.employee_id.strip() if request.employee_id and request.employee_id.strip() else None
+
     user = User(
         full_name=full_name_clean,
         email=email_clean,
         password_hash=hash_password(password_clean),
         role=normalized_role,
         college_name=college_name_clean or None,
-        phone=request.phone,
+        phone=clean_phone,
     )
     db.add(user)
     db.flush()
@@ -272,7 +301,7 @@ def register(
             user_id=user.id,
             name=full_name_clean,
             college_name=college_name_clean or None,
-            roll_number=request.roll_number or f"STU-{uuid.uuid4().hex[:6].upper()}",
+            roll_number=clean_roll or f"STU-{uuid.uuid4().hex[:6].upper()}",
             course_id=request.course_id,
             disability_profiles=request.disability_profiles or [],
         )
@@ -283,10 +312,10 @@ def register(
             user_id=user.id,
             name=full_name_clean,
             email=email_clean,
-            employee_id=request.employee_id or f"EMP-{uuid.uuid4().hex[:6].upper()}",
+            employee_id=clean_emp or f"EMP-{uuid.uuid4().hex[:6].upper()}",
             college_name=college_name_clean or None,
             department_id=request.department_id,
-            phone=request.phone,
+            phone=clean_phone,
         )
         db.add(teacher)
 

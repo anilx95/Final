@@ -410,7 +410,7 @@ async def ingest_subtitle(
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
     # Precompute common translations so students receive Hindi & Telugu instantly without lagging
-    all_translations = translation_service.get_all_translations(original_text)
+    all_translations = translation_service.get_all_translations(original_text, [target_lang] if target_lang else None)
     translated = all_translations.get(target_lang, original_text)
 
     subtitle_id = int(payload.get("id") or (datetime.utcnow().timestamp() * 1000))
@@ -429,34 +429,33 @@ async def ingest_subtitle(
         db.refresh(subtitle)
         subtitle_id = subtitle.id
 
-    # Broadcast subtitle IMMEDIATELY to live classroom subscribers via WebSocket
-    try:
-        session = db.get(LectureSession, session_id)
-        classroom_id = session.classroom_id if session else 1
+    # Broadcast subtitle via WebSocket only if requested or default
+    should_broadcast = payload.get("broadcast", True)
+    if should_broadcast:
+        try:
+            session = db.get(LectureSession, session_id)
+            classroom_id = session.classroom_id if session else 1
 
-        event_payload = {
-            "type": "subtitle",
-            "is_interim": is_interim,
-            "classroom_id": classroom_id,
-            "session_id": session_id,
-            "subtitle": {
-                "id": subtitle_id,
-                "speaker": speaker_name,
-                "text": original_text,
-                "original_text": original_text,
-                "translated_text": translated,
-                "translations": all_translations,
-                "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
-            },
-        }
+            event_payload = {
+                "type": "subtitle",
+                "is_interim": is_interim,
+                "classroom_id": classroom_id,
+                "session_id": session_id,
+                "subtitle": {
+                    "id": subtitle_id,
+                    "speaker": speaker_name,
+                    "text": original_text,
+                    "original_text": original_text,
+                    "translated_text": translated,
+                    "translations": all_translations,
+                    "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
+                },
+            }
 
-        # Broadcast to classroom rooms and session rooms instantly
-        await ws_manager.broadcast_event(classroom_id, event_payload)
-        await ws_manager.broadcast_event(str(classroom_id), event_payload)
-        await ws_manager.broadcast_event(session_id, event_payload)
-        await ws_manager.broadcast_event(str(session_id), event_payload)
-    except Exception as e:
-        logger.warning(f"WebSocket subtitle broadcast warning: {e}")
+            # Broadcast to classroom rooms and session rooms instantly
+            await ws_manager.broadcast_event(str(classroom_id), event_payload)
+        except Exception as e:
+            logger.warning(f"WebSocket subtitle broadcast warning: {e}")
 
     return {
         "status": "ingested",

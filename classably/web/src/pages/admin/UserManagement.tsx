@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Search, Filter, Shield, GraduationCap, School, CheckCircle2, XCircle, Power, Trash2, UserPlus, X } from 'lucide-react';
 import { adminApi } from '../../api/client';
-import { User, UserRole } from '../../types';
+import { User } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 
 export const UserManagement: React.FC = () => {
   const { addToast } = useToast();
@@ -24,7 +28,7 @@ export const UserManagement: React.FC = () => {
     try {
       const roleParam = selectedRoleFilter === 'all' ? undefined : selectedRoleFilter;
       const res = await adminApi.getUsers(roleParam);
-      setUsers(res.data);
+      setUsers(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       addToast({
         type: 'error',
@@ -135,24 +139,26 @@ export const UserManagement: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-100 flex items-center gap-2">
-            <Users className="w-6 h-6 text-sky-400" /> User Management & Admin Directory
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
+            <Users className="w-5 h-5 text-sky-400" /> User Directory & Access Control
           </h1>
-          <p className="text-xs text-slate-400">Manage all Teachers, Students, and System Administrators across the campus</p>
+          <p className="text-xs text-slate-400 mt-1">Manage all Teachers, Students, and System Administrators across the campus</p>
         </div>
 
-        <button
+        <Button
           onClick={() => setIsCreateAdminOpen(true)}
-          className="btn-primary text-xs flex items-center gap-1.5 shrink-0 shadow-lg shadow-purple-500/20 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500"
+          variant="primary"
+          size="sm"
+          leftIcon={<UserPlus className="w-4 h-4" />}
         >
-          <UserPlus className="w-4 h-4" /> Create Admin Account
-        </button>
+          Create Admin Account
+        </Button>
       </div>
 
       {/* Controls Bar: Search & Role Filter */}
-      <div className="card p-4 flex flex-col sm:flex-row items-center gap-4 justify-between">
+      <Card variant="default" className="p-4 flex flex-col sm:flex-row items-center gap-4 justify-between">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
             placeholder="Search by name or email..."
@@ -164,15 +170,15 @@ export const UserManagement: React.FC = () => {
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Filter className="w-4 h-4 text-slate-400" />
-          <span className="text-xs text-slate-400 font-medium">Filter Role:</span>
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+          <span className="text-xs text-slate-400 font-medium">Filter:</span>
+          <div className="flex items-center gap-1 bg-[#080c14] p-1 rounded-lg border border-[#1b2538] text-xs">
             {['all', 'admin', 'teacher', 'student'].map((r) => (
               <button
                 key={r}
                 onClick={() => setSelectedRoleFilter(r)}
-                className={`px-3 py-1 rounded-md capitalize font-semibold transition-all ${
+                className={`px-3 py-1 rounded-md capitalize font-semibold transition-all duration-150 ${
                   selectedRoleFilter === r
-                    ? 'bg-sky-600 text-white shadow'
+                    ? 'bg-[#1b2538] text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -181,14 +187,14 @@ export const UserManagement: React.FC = () => {
             ))}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Users Directory Table */}
-      <div className="card p-0 overflow-hidden">
+      <Card variant="default" className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+              <tr className="bg-[#080c14] border-b border-[#1b2538] text-slate-400 font-semibold uppercase text-[10px] tracking-wider font-mono">
                 <th className="py-3.5 px-4">User</th>
                 <th className="py-3.5 px-4">Role</th>
                 <th className="py-3.5 px-4">Phone</th>
@@ -197,23 +203,22 @@ export const UserManagement: React.FC = () => {
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-[#1b2538]/60">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400">
-                    <div className="w-6 h-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
                     Fetching user records...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400">
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
                     No users matching criteria found.
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={u.id} className="hover:bg-[#121a2a] transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sky-400 text-xs">
@@ -228,19 +233,19 @@ export const UserManagement: React.FC = () => {
 
                     <td className="py-3 px-4">
                       {u.role === 'admin' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[10px] font-bold">
+                        <Badge variant="ai" size="sm">
                           <Shield className="w-3 h-3" /> Admin
-                        </span>
+                        </Badge>
                       )}
                       {u.role === 'teacher' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                        <Badge variant="brand" size="sm">
                           <School className="w-3 h-3" /> Teacher
-                        </span>
+                        </Badge>
                       )}
                       {u.role === 'student' && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/30 text-[10px] font-bold">
+                        <Badge variant="success" size="sm">
                           <GraduationCap className="w-3 h-3" /> Student
-                        </span>
+                        </Badge>
                       )}
                     </td>
 
@@ -292,89 +297,86 @@ export const UserManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Create Admin Account Modal */}
       {isCreateAdminOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-purple-400" />
-                <h2 className="text-base font-bold text-slate-100">Create New Administrator</h2>
-              </div>
-              <button onClick={() => setIsCreateAdminOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          isOpen={isCreateAdminOpen}
+          onClose={() => setIsCreateAdminOpen(false)}
+          title="Create New Administrator"
+          description="Add a system administrator with full access to campus infrastructure."
+          size="md"
+        >
+          <form onSubmit={handleCreateAdmin} className="space-y-4 text-xs pt-2">
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Full Name</label>
+              <input
+                type="text"
+                placeholder="Admin Name"
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+                required
+                className="input-field text-xs"
+              />
             </div>
 
-            <form onSubmit={handleCreateAdmin} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Full Name</label>
-                <input
-                  type="text"
-                  placeholder="Admin Name"
-                  value={adminName}
-                  onChange={(e) => setAdminName(e.target.value)}
-                  required
-                  className="input-field text-xs"
-                />
-              </div>
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Email Address</label>
+              <input
+                type="email"
+                placeholder="admin@university.edu"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                required
+                className="input-field text-xs"
+              />
+            </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="admin@university.edu"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  required
-                  className="input-field text-xs"
-                />
-              </div>
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                required
+                className="input-field text-xs"
+              />
+            </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Password</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  required
-                  className="input-field text-xs"
-                />
-              </div>
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Phone Number (Optional)</label>
+              <input
+                type="text"
+                placeholder="+1 555-0100"
+                value={adminPhone}
+                onChange={(e) => setAdminPhone(e.target.value)}
+                className="input-field text-xs"
+              />
+            </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Phone Number (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="+1 555-0100"
-                  value={adminPhone}
-                  onChange={(e) => setAdminPhone(e.target.value)}
-                  className="input-field text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateAdminOpen(false)}
-                  className="btn-secondary text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingAdmin}
-                  className="btn-primary text-xs bg-purple-600 hover:bg-purple-500 border-purple-500"
-                >
-                  {isCreatingAdmin ? 'Creating...' : 'Create Admin User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-[#1b2538]">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsCreateAdminOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isCreatingAdmin}
+                isLoading={isCreatingAdmin}
+                variant="primary"
+                size="sm"
+              >
+                Create Admin User
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

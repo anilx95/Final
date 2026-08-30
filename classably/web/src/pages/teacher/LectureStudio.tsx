@@ -23,6 +23,13 @@ import { lectureApi, ocrApi, exportApi, cameraApi } from '../../api/client';
 import { LiveSubtitle, RaiseHandItem, QuizQuestion } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { getSessionLanguage, setSessionLanguage, clearSessionLanguage } from '../../utils/sessionLanguage';
+import { SUPPORTED_LANGUAGES, getLanguageByCode } from '../../utils/languages';
+import { translateClientTextAsync, getCachedTranslation } from '../../utils/clientTranslation';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { LanguageSelector } from '../../components/ui/LanguageSelector';
 
 // Module-level persistent recording storage across component unmount/remount
 const globalRecordedVideoChunks: Map<number, Blob[]> = new Map();
@@ -53,8 +60,50 @@ export const LectureStudio: React.FC = () => {
   // Live Live Transcript & Subtitles
   const [subtitles, setSubtitles] = useState<LiveSubtitle[]>([]);
   const [transcriptInput, setTranscriptInput] = useState('');
-  const [targetLang, setTargetLang] = useState('en');
+  const [targetLang, setTargetLang] = useState<string>(() => getSessionLanguage(null, 'en'));
   const [isCcEnabled, setIsCcEnabled] = useState(true);
+
+  // Teacher speech language — drives Web Speech API recognition.lang
+  const [teacherSpeechLang, setTeacherSpeechLang] = useState<string>(() => getSessionLanguage(null, 'en'));
+
+  const handleLanguageChange = (newLang: string) => {
+    setTargetLang(newLang);
+    setTeacherSpeechLang(newLang);
+
+    const activeId = sessionIdRef.current || sessionId;
+    if (activeId) {
+      setSessionLanguage(activeId, newLang);
+    } else {
+      setSessionLanguage(null, newLang);
+    }
+
+    // Broadcast language change to students over WebSocket
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(JSON.stringify({
+          type: 'language_change',
+          classroom_id: 1,
+          session_id: activeId,
+          language: newLang,
+        }));
+      } catch {}
+    }
+  };
+
+  // Map language code -> Web Speech API BCP 47 locale
+  const getSpeechRecognitionLocale = (code: string): string => {
+    const LOCALE_MAP: Record<string, string> = {
+      'en': 'en-US', 'hi': 'hi-IN', 'te': 'te-IN', 'ta': 'ta-IN',
+      'kn': 'kn-IN', 'ml': 'ml-IN', 'mr': 'mr-IN', 'bn': 'bn-IN',
+      'gu': 'gu-IN', 'pa': 'pa-IN', 'ur': 'ur-IN', 'or': 'or-IN',
+      'as': 'as-IN', 'ne': 'ne-NP', 'sa': 'sa-IN', 'ks': 'ks-IN',
+      'sd': 'sd-IN', 'kok': 'kok-IN', 'doi': 'doi-IN', 'mai': 'mai-IN',
+      'ja': 'ja-JP', 'ko': 'ko-KR', 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW',
+      'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE', 'it': 'it-IT',
+      'pt': 'pt-PT', 'ru': 'ru-RU', 'ar': 'ar-SA',
+    };
+    return LOCALE_MAP[code] || 'en-US';
+  };
 
   // OCR Extraction State
   const [ocrText, setOcrText] = useState<string | null>(null);
@@ -98,7 +147,25 @@ export const LectureStudio: React.FC = () => {
     }
   }, [subtitles]);
 
-  const subtitleSeqRef = useRef<number>(0);
+  const prevTeacherSpeechLangRef = useRef<string>(teacherSpeechLang);
+
+  // Restart speech recognition when teacher speech language changes mid-session
+  useEffect(() => {
+    if (prevTeacherSpeechLangRef.current === teacherSpeechLang) {
+      return;
+    }
+    prevTeacherSpeechLangRef.current = teacherSpeechLang;
+    if (isSessionActiveRef.current && sessionIdRef.current && isSttActive) {
+      stopSpeechRecognition();
+      setTimeout(() => {
+        if (isSessionActiveRef.current && sessionIdRef.current) {
+          startSpeechRecognition(sessionIdRef.current, teacherSpeechLang);
+        }
+      }, 100);
+    }
+  }, [teacherSpeechLang]);
+
+  const subtitleSeqRef = useRef<number>(Date.now());
   const pendingSubtitlesQueueRef = useRef<any[]>([]);
 
   const broadcastSubtitle = (subPayload: any) => {
@@ -117,7 +184,25 @@ export const LectureStudio: React.FC = () => {
     }
   };
 
-  const startSpeechRecognition = (activeSessionId: number) => {
+  const getPrecomputedTranslations = (text: string): Record<string, string> => {
+    const clean = (text || '').trim();
+    if (!clean) return {};
+    const translations: Record<string, string> = { en: clean };
+    const targetLanguages = ['hi', 'te', 'ta', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'ur', 'es', 'fr', 'de', 'ar', 'zh-CN', 'ja', 'ko', 'ru'];
+    for (const lang of targetLanguages) {
+      const cached = getCachedTranslation(clean, lang);
+      if (cached && cached !== clean) {
+        translations[lang] = cached;
+      }
+    }
+    return translations;
+  };
+
+  const lastInterimTextRef = useRef<string>('');
+  const recognitionRestartTimerRef = useRef<any>(null);
+  const sttWatchdogTimerRef = useRef<any>(null);
+
+  const startSpeechRecognition = (activeSessionId: number, langOverride?: string) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn('[STT] SpeechRecognition API not supported in this browser.');
@@ -127,19 +212,29 @@ export const LectureStudio: React.FC = () => {
 
     setIsSttSupported(true);
     try {
+      if (recognitionRestartTimerRef.current) {
+        clearTimeout(recognitionRestartTimerRef.current);
+        recognitionRestartTimerRef.current = null;
+      }
+
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (e) {}
+        const existing = recognitionRef.current;
+        existing.onend = null;
+        existing.onerror = null;
+        existing.onresult = null;
+        try { existing.abort(); } catch (e) {}
         recognitionRef.current = null;
       }
 
+      const currentLang = langOverride || getSessionLanguage(activeSessionId, teacherSpeechLang);
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 3;
-      recognition.lang = 'en-US';
+      recognition.lang = getSpeechRecognitionLocale(currentLang);
 
       recognition.onstart = () => {
-        console.log('[STT] Live speech recognition started instantly with high sensitivity.');
+        console.log('[STT] Live continuous speech recognition active.');
         setIsSttActive(true);
       };
 
@@ -167,16 +262,91 @@ export const LectureStudio: React.FC = () => {
           }
         }
 
-        const activeText = (finalTranscript || interimTranscript).trim();
-        const isFinal = Boolean(finalTranscript);
+        const cleanFinal = finalTranscript.trim();
+        const cleanInterim = interimTranscript.trim();
 
-        if (activeText) {
+        // 1. Finalized speech segment
+        if (cleanFinal) {
+          lastInterimTextRef.current = '';
           subtitleSeqRef.current += 1;
           const seq = subtitleSeqRef.current;
-          const subId = isFinal ? Date.now() : 999999000 + (seq % 1000);
+          const finalSubId = Date.now();
+          const finalTranslations = getPrecomputedTranslations(cleanFinal);
 
-          // 1. Instant UI update with 0ms delay (disappears after silence)
-          setActiveSubtitleText(activeText);
+          // Append to teacher's permanent subtitle list
+          setSubtitles((prev) => {
+            const withoutInterim = prev.filter((s) => s.id !== finalSubId && s.id < 999999000);
+            return [...withoutInterim, {
+              id: finalSubId,
+              speaker: user?.full_name || 'Educator',
+              text: cleanFinal,
+              original_text: cleanFinal,
+              timestamp: new Date().toLocaleTimeString(),
+            }];
+          });
+
+          // Broadcast finalized subtitle immediately to students (zero latency)
+          const finalPayload = {
+            type: 'subtitle',
+            role: 'teacher',
+            peer_id: 'teacher',
+            classroom_id: 1,
+            session_id: activeSessionId || sessionIdRef.current,
+            seq: seq,
+            is_interim: false,
+            subtitle: {
+              id: finalSubId,
+              seq: seq,
+              speaker: user?.full_name || 'Educator',
+              text: cleanFinal,
+              original_text: cleanFinal,
+              translations: finalTranslations,
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          };
+          broadcastSubtitle(finalPayload);
+
+          // Ingest to backend database asynchronously for notes & history without re-broadcasting
+          lectureApi.ingestSubtitle({
+            session_id: activeSessionId || sessionIdRef.current || 0,
+            text: cleanFinal,
+            id: finalSubId,
+            speaker_name: user?.full_name || 'Educator',
+            target_lang: targetLang,
+            broadcast: false,
+          }).catch((e) => console.debug('[STT] Background ingest error:', e));
+
+          // Warm translation cache and broadcast translations to students
+          const languagesToWarm = ['hi', 'te', 'ta', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'ur', 'es', 'fr', 'de', 'ja', 'ko', 'zh-CN', 'ar', 'ru'];
+          languagesToWarm.forEach((lang) => {
+            if (!finalTranslations[lang]) {
+              translateClientTextAsync(cleanFinal, lang).then((translated) => {
+                if (translated && translated !== cleanFinal) {
+                  finalTranslations[lang] = translated;
+                  broadcastSubtitle({
+                    type: 'subtitle_translation',
+                    classroom_id: 1,
+                    session_id: activeSessionId || sessionIdRef.current,
+                    sub_id: finalSubId,
+                    text: cleanFinal,
+                    language: lang,
+                    translated_text: translated,
+                  });
+                }
+              }).catch(() => {});
+            }
+          });
+        }
+
+        // 2. Progressive interim speech (live streaming words)
+        if (cleanInterim) {
+          lastInterimTextRef.current = cleanInterim;
+          subtitleSeqRef.current += 1;
+          const seq = subtitleSeqRef.current;
+          const interimSubId = 999999000 + (seq % 1000);
+
+          // Instant UI update for teacher (0ms delay)
+          setActiveSubtitleText(cleanInterim);
           if (subtitleClearTimerRef.current) {
             clearTimeout(subtitleClearTimerRef.current);
           }
@@ -184,44 +354,36 @@ export const LectureStudio: React.FC = () => {
             setActiveSubtitleText(null);
           }, 3000);
 
-          // 2. Broadcast immediately to students with zero buffering
-          const subPayload = {
+          // Broadcast interim speech to students immediately
+          const interimTranslations = getPrecomputedTranslations(cleanInterim);
+          const interimPayload = {
             type: 'subtitle',
+            role: 'teacher',
+            peer_id: 'teacher',
             classroom_id: 1,
             session_id: activeSessionId || sessionIdRef.current,
             seq: seq,
-            is_interim: !isFinal,
+            is_interim: true,
             subtitle: {
-              id: subId,
+              id: interimSubId,
               seq: seq,
               speaker: user?.full_name || 'Educator',
-              text: activeText,
-              original_text: activeText,
+              text: cleanInterim,
+              original_text: cleanInterim,
+              translations: interimTranslations,
               timestamp: new Date().toLocaleTimeString(),
             },
           };
-          broadcastSubtitle(subPayload);
-
-          if (isFinal) {
-            setSubtitles((prev) => {
-              const withoutInterim = prev.filter((s) => s.id !== subId && s.id < 999999000);
-              return [...withoutInterim, {
-                id: subId,
-                speaker: user?.full_name || 'Educator',
-                text: activeText,
-                original_text: activeText,
-                timestamp: new Date().toLocaleTimeString(),
-              }];
-            });
-
-            // Ingest to backend database asynchronously
-            lectureApi.ingestSubtitle({
-              session_id: activeSessionId || sessionIdRef.current || 0,
-              text: finalTranscript,
-              speaker_name: user?.full_name || 'Educator',
-              target_lang: targetLang,
-            }).catch((e) => console.debug('[STT] Background ingest error:', e));
+          broadcastSubtitle(interimPayload);
+        } else if (cleanFinal) {
+          // If no interim words, show finalized sentence on teacher overlay
+          setActiveSubtitleText(cleanFinal);
+          if (subtitleClearTimerRef.current) {
+            clearTimeout(subtitleClearTimerRef.current);
           }
+          subtitleClearTimerRef.current = setTimeout(() => {
+            setActiveSubtitleText(null);
+          }, 3000);
         }
       };
 
@@ -233,18 +395,55 @@ export const LectureStudio: React.FC = () => {
       };
 
       recognition.onend = () => {
-        // Continuous speech recognition recovery with minimal delay
-        if (isSessionActiveRef.current && recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (e) {
-            setTimeout(() => {
-              if (isSessionActiveRef.current && recognitionRef.current) {
-                try { recognitionRef.current.start(); } catch (err) {}
-              }
-            }, 10);
-          }
-        } else {
+        // Flush any unfinalized interim speech captured right before browser pause
+        if (lastInterimTextRef.current && lastInterimTextRef.current.trim()) {
+          const buffered = lastInterimTextRef.current.trim();
+          lastInterimTextRef.current = '';
+          subtitleSeqRef.current += 1;
+          const flushSeq = subtitleSeqRef.current;
+          const flushSubId = Date.now();
+          const flushTrans = getPrecomputedTranslations(buffered);
+
+          setSubtitles((prev) => [
+            ...prev.filter((s) => s.id !== flushSubId && s.id < 999999000),
+            {
+              id: flushSubId,
+              speaker: user?.full_name || 'Educator',
+              text: buffered,
+              original_text: buffered,
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          ]);
+
+          broadcastSubtitle({
+            type: 'subtitle',
+            role: 'teacher',
+            peer_id: 'teacher',
+            classroom_id: 1,
+            session_id: activeSessionId || sessionIdRef.current,
+            seq: flushSeq,
+            is_interim: false,
+            subtitle: {
+              id: flushSubId,
+              seq: flushSeq,
+              speaker: user?.full_name || 'Educator',
+              text: buffered,
+              original_text: buffered,
+              translations: flushTrans,
+              timestamp: new Date().toLocaleTimeString(),
+            },
+          });
+        }
+
+        // Continuous speech recognition recovery with fresh instance
+        if (isSessionActiveRef.current && recognitionRef.current === recognition) {
+          recognitionRef.current = null;
+          recognitionRestartTimerRef.current = setTimeout(() => {
+            if (isSessionActiveRef.current) {
+              startSpeechRecognition(activeSessionId || sessionIdRef.current || 1, langOverride);
+            }
+          }, 50);
+        } else if (recognitionRef.current === recognition) {
           setIsSttActive(false);
         }
       };
@@ -253,7 +452,14 @@ export const LectureStudio: React.FC = () => {
       try {
         recognition.start();
       } catch (startErr) {
-        console.warn('[STT] Recognition immediate start notice:', startErr);
+        console.warn('[STT] Recognition start notice:', startErr);
+        if (isSessionActiveRef.current) {
+          recognitionRestartTimerRef.current = setTimeout(() => {
+            if (isSessionActiveRef.current) {
+              startSpeechRecognition(activeSessionId, langOverride);
+            }
+          }, 150);
+        }
       }
     } catch (err) {
       console.warn('[STT] Could not initialize SpeechRecognition:', err);
@@ -261,13 +467,26 @@ export const LectureStudio: React.FC = () => {
   };
 
   const stopSpeechRecognition = () => {
+    if (recognitionRestartTimerRef.current) {
+      clearTimeout(recognitionRestartTimerRef.current);
+      recognitionRestartTimerRef.current = null;
+    }
+    if (sttWatchdogTimerRef.current) {
+      clearInterval(sttWatchdogTimerRef.current);
+      sttWatchdogTimerRef.current = null;
+    }
     if (subtitleClearTimerRef.current) {
       clearTimeout(subtitleClearTimerRef.current);
       subtitleClearTimerRef.current = null;
     }
+    lastInterimTextRef.current = '';
     setActiveSubtitleText(null);
     if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch (e) {}
+      const rec = recognitionRef.current;
+      rec.onend = null;
+      rec.onerror = null;
+      rec.onresult = null;
+      try { rec.abort(); } catch (e) {}
       recognitionRef.current = null;
     }
     setIsSttActive(false);
@@ -897,6 +1116,8 @@ export const LectureStudio: React.FC = () => {
       localStreamRef.current = masterStream;
       if (videoRef.current) {
         videoRef.current.srcObject = masterStream;
+        videoRef.current.muted = true;
+        videoRef.current.play().catch(() => {});
       }
 
       const audioTracks = masterStream.getAudioTracks();
@@ -971,8 +1192,14 @@ export const LectureStudio: React.FC = () => {
             setRecordingSeconds(elapsed);
           }
 
+          // Restore persisted language for this active class session
+          const restoredLang = getSessionLanguage(sess.id, 'en');
+          setTargetLang(restoredLang);
+          setTeacherSpeechLang(restoredLang);
+          prevTeacherSpeechLangRef.current = restoredLang;
+
           await startMediaDevices(sess.id);
-          startSpeechRecognition(sess.id);
+          startSpeechRecognition(sess.id, restoredLang);
           addToast({
             type: 'info',
             title: 'Resumed Active Lecture',
@@ -1087,8 +1314,11 @@ export const LectureStudio: React.FC = () => {
       setLastCompletedSessionId(null);
       setIsSessionActive(true);
       isSessionActiveRef.current = true;
+      // Persist active language selection for this new class session
+      setSessionLanguage(newSession.id, targetLang);
+
       // Start STT immediately so speech transcription is primed with 0ms delay
-      startSpeechRecognition(newSession.id);
+      startSpeechRecognition(newSession.id, targetLang);
       await startMediaDevices(newSession.id);
 
       addToast({
@@ -1139,6 +1369,11 @@ export const LectureStudio: React.FC = () => {
     setConnectedStudents([]);
     setOcrText(null);
     stopMediaDevices();
+
+    // Clear persisted session language and reset state for clean start of future classes
+    clearSessionLanguage(targetSessionId);
+    setTargetLang('en');
+    setTeacherSpeechLang('en');
 
     addToast({
       type: 'success',
@@ -1195,7 +1430,20 @@ export const LectureStudio: React.FC = () => {
     if (!sessionId) return;
     try {
       const res = await lectureApi.getSubtitles(sessionId, targetLang);
-      setSubtitles(Array.isArray(res.data) ? res.data : []);
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setSubtitles((prev) => {
+          const map = new Map<string, LiveSubtitle>();
+          prev.forEach((s) => {
+            const key = (s.original_text || s.text || '').trim();
+            if (key) map.set(key, s);
+          });
+          res.data.forEach((s: LiveSubtitle) => {
+            const key = (s.original_text || s.text || '').trim();
+            if (key) map.set(key, s);
+          });
+          return Array.from(map.values()).sort((a, b) => (a.id || 0) - (b.id || 0));
+        });
+      }
     } catch (err) {
       // keep current subtitles on fetch failure
     }
@@ -1337,76 +1585,78 @@ export const LectureStudio: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Studio Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-xl">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${isSessionActive ? 'bg-emerald-500 animate-ping' : 'bg-slate-600'}`} />
-            <h1 className="text-xl font-extrabold text-slate-100">Smart Lecture Studio</h1>
-            {isSessionActive && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 uppercase">
-                Session #{sessionId} LIVE
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 mt-1">Live Camera Feed, AI Board OCR, Real-Time STT Subtitles, & Raise Hand Queue</p>
-          {isSessionActive && (
-            <div className="mt-2 text-xs text-slate-300 flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded border border-sky-500/30">
-                Subject: {subject}
-              </span>
-              <span className="font-bold text-purple-300 bg-purple-500/10 px-2.5 py-0.5 rounded border border-purple-500/30">
-                Topic: {topic}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {isSessionActive && (
+      <Card variant="default" className="p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2.5 py-1 rounded-xl">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                REC {Math.floor(recordingSeconds / 3600).toString().padStart(2, '0')}:{Math.floor((recordingSeconds % 3600) / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
-              </span>
-
-              {isSttActive && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-sky-300 bg-sky-500/10 border border-sky-500/30 px-2.5 py-1 rounded-xl">
-                  <Mic className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
-                  Live STT Active
-                </span>
+              <span className={`w-2.5 h-2.5 rounded-full ${isSessionActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
+              <h1 className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight">Smart Lecture Studio</h1>
+              {isSessionActive && (
+                <Badge variant="success" size="sm">
+                  Session #{sessionId} LIVE
+                </Badge>
               )}
             </div>
-          )}
+            <p className="text-xs text-slate-400 mt-1">Live Camera Feed, AI Board OCR, Real-Time STT Subtitles, & Raise Hand Queue</p>
+            {isSessionActive && (
+              <div className="mt-2 text-xs text-slate-300 flex items-center gap-2 flex-wrap">
+                <Badge variant="brand" size="sm">
+                  Subject: {subject}
+                </Badge>
+                <Badge variant="ai" size="sm">
+                  Topic: {topic}
+                </Badge>
+              </div>
+            )}
+          </div>
 
-          {isSessionActive && (
-            <button onClick={handleEndLecture} className="btn-danger">
-              <Square className="w-4 h-4" /> End Lecture & Save Notes
-            </button>
-          )}
+          <div className="flex items-center gap-2.5">
+            {isSessionActive && (
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                  REC {Math.floor(recordingSeconds / 3600).toString().padStart(2, '0')}:{Math.floor((recordingSeconds % 3600) / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+                </span>
+
+                {isSttActive && (
+                  <Badge variant="brand" size="sm">
+                    <Mic className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+                    STT Active
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {isSessionActive && (
+              <Button variant="danger" size="sm" onClick={handleEndLecture} leftIcon={<Square className="w-3.5 h-3.5" />}>
+                End Lecture & Save Notes
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      </Card>
 
       {/* Class Session Setup Card (when inactive) */}
       {!isSessionActive && (
-        <div className="card bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border-sky-500/40 p-6 space-y-5 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <Card variant="ai" className="p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
             <div>
-              <h2 className="text-lg font-extrabold text-slate-100 flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-sky-400" /> Start New Lecture Session
+              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 tracking-tight">
+                <BookOpen className="w-4 h-4 text-sky-400" /> Start New Lecture Session
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Enter the subject name and topic details. This will be broadcast live to all connected students.
+                Enter the subject name and topic details. This will broadcast live to all connected students.
               </p>
             </div>
-            <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-500/10 px-3 py-1 rounded-lg border border-sky-500/30">
+            <Badge variant="brand" size="sm">
               Classroom #1
-            </span>
+            </Badge>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Subject Name Input */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                 <BookOpen className="w-3.5 h-3.5 text-sky-400" /> Subject Name <span className="text-rose-400">*</span>
               </label>
               <input
@@ -1414,17 +1664,17 @@ export const LectureStudio: React.FC = () => {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="e.g. Mathematics, Computer Networks, Physics..."
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                className="input-field text-xs"
               />
               {/* Quick Chips */}
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-[10px] text-slate-500 font-semibold">Quick select:</span>
+                <span className="text-[10px] text-slate-500 font-semibold">Quick:</span>
                 {['Mathematics', 'Computer Science', 'Physics', 'Artificial Intelligence', 'Data Structures'].map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => setSubject(s)}
-                    className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700 transition-all cursor-pointer"
+                    className="text-[10px] px-2 py-0.5 rounded bg-[#080c14] hover:bg-sky-500/15 text-slate-300 hover:text-sky-300 border border-[#1b2538] transition-all cursor-pointer"
                   >
                     {s}
                   </button>
@@ -1433,8 +1683,8 @@ export const LectureStudio: React.FC = () => {
             </div>
 
             {/* Subject Topic Input */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-purple-400" /> Subject Topic <span className="text-rose-400">*</span>
               </label>
               <input
@@ -1442,44 +1692,44 @@ export const LectureStudio: React.FC = () => {
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="e.g. Matrix Transformations, TCP/IP Architecture..."
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                className="input-field text-xs"
               />
               <p className="text-[11px] text-slate-400">Describe the specific chapter or topic being taught today.</p>
             </div>
           </div>
 
-          <div className="flex items-center justify-end pt-2 border-t border-slate-800">
-            <button
+          <div className="flex items-center justify-end pt-3 border-t border-[#1b2538]">
+            <Button
               onClick={handleStartLecture}
               disabled={!subject.trim() || !topic.trim()}
-              className={`btn-primary px-6 py-2.5 text-sm font-bold shadow-lg transition-all ${
-                !subject.trim() || !topic.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
-              }`}
+              variant="primary"
+              size="md"
+              leftIcon={<Play className="w-4 h-4 fill-current" />}
             >
-              <Play className="w-4 h-4 fill-current" /> Start Live Lecture
-            </button>
+              Start Live Lecture
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Main Studio Grid: Video Camera + OCR / Subtitles */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Live Camera Stream & OCR Board Scanner */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="card p-0 overflow-hidden relative group bg-black">
+          <Card variant="default" padding="none" className="overflow-hidden relative group bg-black">
             {/* Camera Controls Overlay Header */}
-            <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-2 pointer-events-auto bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
-                <Camera className="w-4 h-4 text-sky-400" />
-                <span className="font-semibold text-slate-200">Camera Source:</span>
+            <div className="absolute top-3.5 left-3.5 right-3.5 z-20 flex items-center justify-between pointer-events-none">
+              <div className="flex items-center gap-2 pointer-events-auto bg-[#0d131f]/90 backdrop-blur-md px-2.5 py-1 rounded-lg border border-[#1b2538] text-xs">
+                <Camera className="w-3.5 h-3.5 text-sky-400" />
+                <span className="font-semibold text-slate-200 text-[11px]">Camera:</span>
                 <select
                   value={cameraSourceType}
                   onChange={(e) => setCameraSourceType(e.target.value as any)}
-                  className="bg-transparent text-sky-300 font-bold focus:outline-none cursor-pointer"
+                  className="bg-transparent text-sky-300 font-bold focus:outline-none cursor-pointer text-[11px]"
                 >
-                  <option value="webcam" className="bg-slate-900 text-slate-100">Laptop Webcam</option>
-                  <option value="esp32" className="bg-slate-900 text-slate-100">ESP32 Cam Stream</option>
-                  <option value="ip_cam" className="bg-slate-900 text-slate-100">RTSP USB Camera</option>
+                  <option value="webcam" className="bg-[#0d131f] text-slate-100">Laptop Webcam</option>
+                  <option value="esp32" className="bg-[#0d131f] text-slate-100">ESP32 Cam Stream</option>
+                  <option value="ip_cam" className="bg-[#0d131f] text-slate-100">RTSP USB Camera</option>
                 </select>
               </div>
 
@@ -1493,14 +1743,14 @@ export const LectureStudio: React.FC = () => {
                       ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-md shadow-yellow-500/10 hover:bg-yellow-500/30'
                       : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
                   }`}
-                  title="Toggle YouTube Closed Captions (CC)"
+                  title="Toggle Closed Captions (CC)"
                 >
                   <span className="text-[11px] font-extrabold font-mono">CC</span>
                   <span className="text-[9px] uppercase font-bold">{isCcEnabled ? 'ON' : 'OFF'}</span>
                 </button>
 
                 <span className={`text-[10px] font-bold px-2 py-1 rounded-md backdrop-blur-md ${cameraActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
-                  {cameraActive ? 'CAMERA ACTIVE' : 'CAMERA OFF'}
+                  {cameraActive ? 'CAMERA ON' : 'CAMERA OFF'}
                 </span>
 
                 <button
@@ -1515,7 +1765,7 @@ export const LectureStudio: React.FC = () => {
                   title={micActive ? 'Click to Mute Microphone' : 'Click to Unmute Microphone'}
                 >
                   <Mic className={`w-3.5 h-3.5 ${micActive ? 'text-emerald-400 animate-pulse' : 'text-rose-400'}`} />
-                  <div className="w-14 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                  <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
                     <div
                       className={`h-full transition-all duration-75 ease-out ${micActive ? 'bg-emerald-400' : 'bg-rose-500'}`}
                       style={{ width: `${micActive ? micLevel : 0}%` }}
@@ -1529,7 +1779,7 @@ export const LectureStudio: React.FC = () => {
             </div>
 
             {/* Video Viewport */}
-            <div className="h-80 sm:h-96 w-full relative flex items-center justify-center bg-slate-950">
+            <div className="h-80 sm:h-96 w-full relative flex items-center justify-center bg-black">
               <video
                 ref={videoRef}
                 autoPlay
@@ -1538,14 +1788,14 @@ export const LectureStudio: React.FC = () => {
                 className={`w-full h-full object-cover transition-opacity duration-300 ${cameraActive ? 'opacity-100 relative z-10' : 'opacity-0 absolute inset-0 pointer-events-none'}`}
               />
 
-              {/* Netflix Style CC Subtitle Overlay — Centered near bottom, comfortably above edge */}
+              {/* CC Subtitle Overlay */}
               {isSessionActive && isCcEnabled && activeSubtitleText && (
                 <div className="absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none flex flex-col items-center gap-1 animate-fade-in">
-                  <div className="bg-black/80 backdrop-blur-sm px-5 py-2.5 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2.5 transition-all duration-150">
-                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
-                      CC • {targetLang === 'hi' ? 'HINDI' : targetLang === 'te' ? 'TELUGU' : 'ENGLISH'}
+                  <div className="bg-black/85 backdrop-blur-sm px-4.5 py-2 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2.5 transition-all duration-150">
+                    <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
+                      CC • {getLanguageByCode(targetLang)?.name?.toUpperCase() || targetLang.toUpperCase()}
                     </span>
-                    <p className="text-yellow-300 sm:text-yellow-200 font-extrabold text-sm sm:text-base text-center leading-snug tracking-wide drop-shadow-md">
+                    <p className="text-yellow-300 sm:text-yellow-200 font-extrabold text-xs sm:text-sm text-center leading-snug tracking-wide drop-shadow-md">
                       {activeSubtitleText}
                     </p>
                   </div>
@@ -1553,91 +1803,91 @@ export const LectureStudio: React.FC = () => {
               )}
 
               {!cameraActive && (
-                <div className="text-center space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 mx-auto">
-                    <Video className="w-8 h-8" />
+                <div className="text-center space-y-2.5">
+                  <div className="w-14 h-14 rounded-2xl bg-[#080c14] border border-[#1b2538] flex items-center justify-center text-slate-500 mx-auto">
+                    <Video className="w-7 h-7" />
                   </div>
-                  <p className="text-xs text-slate-400">Lecture Session Inactive. Click "Start Lecture" above to enable live stream.</p>
+                  <p className="text-xs text-slate-400">Lecture Session Inactive. Click "Start Live Lecture" above to enable stream.</p>
                 </div>
               )}
             </div>
 
             {/* Studio Action Controls Footer */}
-            <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="p-3.5 bg-[#080c14] border-t border-[#1b2538] flex flex-wrap items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
-                <button
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={handlePerformOcrScan}
                   disabled={!isSessionActive || isOcrProcessing}
-                  className="btn-primary text-xs"
+                  isLoading={isOcrProcessing}
+                  leftIcon={<Sparkles className="w-3.5 h-3.5" />}
                 >
-                  <Sparkles className={`w-4 h-4 ${isOcrProcessing ? 'animate-spin' : ''}`} />
-                  {isOcrProcessing ? 'Analyzing Board...' : 'Run Live OCR Board Scan'}
-                </button>
+                  {isOcrProcessing ? 'Analyzing Board...' : 'Run Live Board OCR'}
+                </Button>
               </div>
 
               {isSessionActive && (
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={handleGenerateQuiz}
                     disabled={isGeneratingQuiz}
-                    className="btn-secondary text-xs"
+                    isLoading={isGeneratingQuiz}
+                    leftIcon={<Zap className="w-3.5 h-3.5 text-amber-400" />}
                   >
-                    <Zap className="w-4 h-4 text-amber-400" /> Generate AI Quiz
-                  </button>
+                    Generate AI Quiz
+                  </Button>
                 </div>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* OCR Board Detection Output Display */}
           {ocrText && (
-            <div className="card border-sky-500/40 bg-sky-950/20 space-y-2 animate-fade-in">
-              <div className="flex items-center justify-between border-b border-sky-500/30 pb-2">
-                <h3 className="font-bold text-sky-300 text-xs flex items-center gap-2">
+            <Card variant="ai" className="p-4 space-y-2 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-indigo-500/25 pb-2">
+                <h3 className="font-bold text-indigo-300 text-xs flex items-center gap-2">
                   <Sparkles className="w-4 h-4" /> Real-Time OCR Smart Board Extraction
                 </h3>
-                <span className="text-[10px] text-sky-400 font-mono">Recognized Text</span>
+                <span className="text-[10px] text-indigo-300 font-mono">Recognized Text</span>
               </div>
-              <p className="text-sm font-mono text-slate-200 bg-slate-950/80 p-3 rounded-lg border border-slate-800 leading-relaxed">
+              <p className="text-xs font-mono text-slate-200 bg-[#080c14] p-3 rounded-lg border border-[#1b2538] leading-relaxed">
                 {ocrText}
               </p>
-            </div>
+            </Card>
           )}
 
           {/* Live Audio Ingestion & Subtitle Stream */}
-          <div className="card space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <Card variant="default" className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1b2538] pb-3">
               <div>
-                <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                  <Volume2 className="w-4 h-4 text-sky-400" /> Live Speech-to-Text Transcripts & Translation
+                <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
+                  <Volume2 className="w-4 h-4 text-sky-400" /> Live Speech-to-Text & Subtitle Stream
                 </h3>
-                <p className="text-[11px] text-slate-400">Subtitles automatically generated from mic speech & translated for students</p>
+                <p className="text-[11px] text-slate-400">Subtitles generated in real time from microphone audio</p>
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
-                <Globe className="w-4 h-4 text-slate-400" />
-                <select
-                  value={targetLang}
-                  onChange={(e) => setTargetLang(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none"
-                >
-                  <option value="en">English (Original)</option>
-                  <option value="hi">Hindi (हिन्दी)</option>
-                  <option value="te">Telugu (తెలుగు)</option>
-                </select>
+              <div className="flex items-center gap-2">
+                <LanguageSelector
+                  selectedLanguage={targetLang}
+                  onLanguageChange={handleLanguageChange}
+                  size="sm"
+                />
               </div>
             </div>
 
             {/* STT Status Banner */}
             {isSessionActive && (
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-[#080c14] border border-[#1b2538] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">
                   <Mic className={`w-4 h-4 ${isSttActive ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
                   <span className="text-slate-300 font-medium">
                     {isSttActive
-                      ? 'Live Speech-to-Text Active: Generating subtitles from mic audio.'
+                      ? 'Live Speech-to-Text Active: Ingesting speech audio.'
                       : isSttSupported
-                      ? 'Live STT Paused. Click button to resume auto-transcription.'
+                      ? 'Live STT Paused. Click button to resume transcription.'
                       : 'Web Speech API unavailable in this browser. Use manual input below.'}
                   </span>
                 </div>
@@ -1646,18 +1896,18 @@ export const LectureStudio: React.FC = () => {
                     <button
                       type="button"
                       onClick={toggleSttRecognition}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                         isSttActive
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
-                          : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
+                          : 'bg-[#121a2a] text-slate-300 border border-[#1b2538] hover:bg-slate-800'
                       }`}
                     >
-                      <Mic className="w-3.5 h-3.5" />
+                      <Mic className="w-3 h-3" />
                       <span>{isSttActive ? 'STT ON' : 'Turn STT ON'}</span>
                     </button>
                   )}
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                    {(subtitles || []).length} Subtitles
+                  <span className="text-[10px] font-mono font-bold text-slate-400 bg-[#0d131f] px-2 py-0.5 rounded border border-[#1b2538]">
+                    {(subtitles || []).length} Subs
                   </span>
                 </div>
               </div>
@@ -1667,25 +1917,25 @@ export const LectureStudio: React.FC = () => {
             <form onSubmit={handleIngestSubtitle} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Type or speak live audio transcript (e.g. 'Next topic: Convolutional Layer Filters')..."
+                placeholder="Type or speak live audio transcript (e.g. 'Next topic: Convolutional Filters')..."
                 value={transcriptInput}
                 onChange={(e) => setTranscriptInput(e.target.value)}
                 disabled={!isSessionActive}
                 className="input-field text-xs"
               />
-              <button type="submit" disabled={!isSessionActive} className="btn-primary text-xs whitespace-nowrap">
-                Ingest Speech
-              </button>
+              <Button type="submit" disabled={!isSessionActive} variant="primary" size="sm" className="whitespace-nowrap">
+                Ingest
+              </Button>
             </form>
 
             {/* Live Subtitle Transcript Stream Box */}
-            <div ref={subtitleContainerRef} className="space-y-2 max-h-60 overflow-y-auto bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+            <div ref={subtitleContainerRef} className="space-y-2 max-h-60 overflow-y-auto bg-[#080c14] p-3 rounded-xl border border-[#1b2538]">
               {(!subtitles || subtitles.length === 0) ? (
-                <p className="text-xs text-slate-500 py-4 text-center">No speech transcripts ingested yet.</p>
+                <p className="text-xs text-slate-500 py-6 text-center">No speech transcripts ingested yet.</p>
               ) : (
                 subtitles.map((sub) => (
-                  <div key={sub.id} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800/80 text-xs">
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                  <div key={sub.id} className="p-2.5 rounded-lg bg-[#0d131f] border border-[#1b2538] text-xs">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
                       <span className="font-bold text-sky-400">{sub.speaker}</span>
                       <span>{sub.timestamp}</span>
                     </div>
@@ -1694,119 +1944,123 @@ export const LectureStudio: React.FC = () => {
                 ))
               )}
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Right 1 Col: Connected Students, Raised Hand Queue, Quizzes & Export Downloads */}
         <div className="space-y-6">
-          {/* Connected Live Students & Kick Control Panel */}
-          <div className="card space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                <Users className="w-4 h-4 text-sky-400" /> Connected Live Students ({(connectedStudents || []).length})
+          {/* Connected Live Students */}
+          <Card variant="default" className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
+              <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
+                <Users className="w-4 h-4 text-sky-400" /> Connected Students ({(connectedStudents || []).length})
               </h3>
-              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                {isSessionActive ? 'LIVE SESSION' : 'INACTIVE'}
-              </span>
+              <Badge variant={isSessionActive ? 'success' : 'neutral'} size="sm" dot pulse={isSessionActive}>
+                {isSessionActive ? 'LIVE' : 'IDLE'}
+              </Badge>
             </div>
 
             <div className="space-y-2 max-h-56 overflow-y-auto">
               {!isSessionActive ? (
-                <p className="text-xs text-slate-500 py-4 text-center">Start a lecture session to see connected students.</p>
+                <p className="text-xs text-slate-500 py-6 text-center">Start a lecture session to see connected students.</p>
               ) : (!connectedStudents || connectedStudents.length === 0) ? (
-                <p className="text-xs text-slate-500 py-4 text-center">No students currently connected to live stream.</p>
+                <p className="text-xs text-slate-500 py-6 text-center">No students currently connected to live stream.</p>
               ) : (
                 connectedStudents.map((st, idx) => {
                   const name = st.full_name || st.student_name || `Student #${st.student_id || idx + 1}`;
                   const sId = st.student_id || st.id || idx + 1;
                   return (
-                    <div key={st.id || idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                    <div key={st.id || idx} className="p-2.5 rounded-xl bg-[#080c14] border border-[#1b2538] flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
                         <div className="truncate">
                           <div className="font-bold text-slate-200 truncate">{name}</div>
-                          <div className="text-[10px] text-slate-400 truncate">Roll No: {st.roll_number || `S-${100 + sId}`}</div>
+                          <div className="text-[10px] text-slate-400 truncate">Roll: {st.roll_number || `S-${100 + sId}`}</div>
                         </div>
                       </div>
 
                       <button
                         onClick={() => handleKickStudent(sId, name)}
-                        className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-extrabold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+                        className="px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
                         title="Kick student out of class"
                       >
-                        <UserX className="w-3.5 h-3.5 text-rose-400" /> Kick Out
+                        <UserX className="w-3 h-3 text-rose-400" /> Kick
                       </button>
                     </div>
                   );
                 })
               )}
             </div>
-          </div>
+          </Card>
+
           {/* Live Student Raised Hand Queue */}
-          <div className="card space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+          <Card variant="default" className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
+              <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
                 <HelpCircle className="w-4 h-4 text-amber-400" /> Raised Hand Assistance Queue
               </h3>
-              <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+              <Badge variant="warning" size="sm">
                 {(raiseHandQueue || []).length} Pending
-              </span>
+              </Badge>
             </div>
 
             <div className="space-y-2 max-h-56 overflow-y-auto">
               {(!raiseHandQueue || raiseHandQueue.length === 0) ? (
-                <p className="text-xs text-slate-500 py-4 text-center">No pending student assistance requests.</p>
+                <p className="text-xs text-slate-500 py-6 text-center">No pending student assistance requests.</p>
               ) : (
                 raiseHandQueue.map((item) => (
-                  <div key={item.id} className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-xs space-y-2">
+                  <div key={item.id} className="p-3 rounded-xl bg-[#080c14] border border-amber-500/25 text-xs space-y-2">
                     <div className="flex items-center justify-between font-bold text-slate-200">
                       <span>{item.student_name}</span>
-                      <span className="text-[10px] text-slate-400">{item.created_at}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{item.created_at}</span>
                     </div>
                     <p className="text-slate-300 text-[11px]">{item.question_text}</p>
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => handleResolveHand(item.id)}
-                      className="btn-secondary w-full text-[11px] py-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                      className="w-full text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                      leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Call On Student & Resolve
-                    </button>
+                      Call On & Resolve
+                    </Button>
                   </div>
                 ))
               )}
             </div>
-          </div>
+          </Card>
 
           {/* Generated AI Quizzes */}
           {((quizzes || []).length > 0) && (
-            <div className="card space-y-3 border-purple-500/30 bg-purple-950/20">
-              <h3 className="font-bold text-purple-300 text-sm flex items-center gap-2">
+            <Card variant="ai" className="space-y-3 p-4">
+              <h3 className="font-bold text-indigo-300 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
                 <BookOpen className="w-4 h-4" /> AI Generated Quizzes & Flashcards
               </h3>
               <div className="space-y-2 max-h-60 overflow-y-auto text-xs">
                 {(quizzes || []).map((q) => (
-                  <div key={q.id} className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-purple-400">{q.type}</span>
+                  <div key={q.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-indigo-400 font-mono">{q.type}</span>
                     <div className="font-semibold text-slate-100">{q.question}</div>
                     <div className="text-[11px] text-emerald-400">Answer: {q.correct_answer}</div>
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Export & Download Hub */}
           {(() => {
             const exportTargetSessionId = sessionId || lastCompletedSessionId;
             return (
-              <div className="card space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                    <Download className="w-4 h-4 text-sky-400" /> Export Lecture Artifacts
+              <Card variant="default" className="space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
+                  <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
+                    <Download className="w-4 h-4 text-sky-400" /> Export Artifacts
                   </h3>
                   {lastCompletedSessionId && !sessionId && (
-                    <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30">
+                    <Badge variant="ai" size="sm">
                       Session #{lastCompletedSessionId} Saved
-                    </span>
+                    </Badge>
                   )}
                 </div>
 
@@ -1814,49 +2068,49 @@ export const LectureStudio: React.FC = () => {
                   <a
                     href={exportTargetSessionId ? exportApi.downloadSummaryUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
-                    <span>Download AI Summary (PDF)</span>
-                    <Download className="w-3.5 h-3.5" />
+                    <span>AI Summary (PDF)</span>
+                    <Download className="w-3.5 h-3.5 text-slate-400" />
                   </a>
 
                   <a
                     href={exportTargetSessionId ? exportApi.downloadSubtitlesUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
-                    <span>Download Captions (VTT)</span>
-                    <Download className="w-3.5 h-3.5" />
+                    <span>Captions (VTT)</span>
+                    <Download className="w-3.5 h-3.5 text-slate-400" />
                   </a>
 
                   <a
                     href={exportTargetSessionId ? exportApi.downloadTranscriptUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
-                    <span>Download Transcript (TXT)</span>
-                    <Download className="w-3.5 h-3.5" />
+                    <span>Transcript (TXT)</span>
+                    <Download className="w-3.5 h-3.5 text-slate-400" />
                   </a>
 
                   <a
                     href={exportTargetSessionId ? exportApi.downloadAudioUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30 ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30 ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
-                    <span>Download Audio Recording (WEBM)</span>
-                    <Download className="w-3.5 h-3.5" />
+                    <span>Audio Recording (WEBM)</span>
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
                   </a>
 
                   <a
                     href={exportTargetSessionId ? exportApi.downloadRecordingUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between text-sky-400 border-sky-500/30 ${!exportTargetSessionId ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`btn-secondary w-full justify-between text-sky-400 border-sky-500/30 ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
-                    <span>Download Full Video Recording (WEBM)</span>
-                    <Download className="w-3.5 h-3.5" />
+                    <span>Full Video Recording (WEBM)</span>
+                    <Download className="w-3.5 h-3.5 text-sky-400" />
                   </a>
                 </div>
-              </div>
+              </Card>
             );
           })()}
         </div>
@@ -1864,3 +2118,4 @@ export const LectureStudio: React.FC = () => {
     </div>
   );
 };
+

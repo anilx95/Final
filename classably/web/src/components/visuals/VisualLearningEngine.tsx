@@ -195,11 +195,11 @@ export const VisualLearningEngine: React.FC<VisualLearningEngineProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full text-slate-100 animate-fade-in">
+    <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full text-slate-100 animate-fade-in">
       {/* Automated Header Bar with Live Speech Sync Indicator */}
-      <div className="bg-slate-950/90 border-b border-slate-800 px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-[#080c14] border-b border-[#1b2538] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20 relative">
+          <div className="p-2 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 shadow-lg shadow-sky-500/20 relative">
             <Sparkles className="w-5 h-5 text-white animate-pulse" />
             {isSpeechSyncing && (
               <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
@@ -207,7 +207,7 @@ export const VisualLearningEngine: React.FC<VisualLearningEngineProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h3 className="font-bold text-base text-white tracking-wide flex items-center gap-2">
+              <h3 className="font-bold text-sm sm:text-base text-white tracking-tight flex items-center gap-2">
                 <span>AI Visual Learning Engine</span>
               </h3>
               {/* Real-time speech sync badge */}

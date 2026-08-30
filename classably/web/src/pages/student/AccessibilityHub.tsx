@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Volume2, Globe, Type, Sparkles, Contrast, Check, VolumeX, ShieldAlert, Cpu } from 'lucide-react';
+import { Eye, Volume2, Globe, Type, Sparkles, Contrast, Check, VolumeX, Cpu } from 'lucide-react';
 import { useAccessibility, DisabilityProfile } from '../../context/AccessibilityContext';
 import { useAuth } from '../../context/AuthContext';
 import { accessibilityApi, profilesApi, authApi } from '../../api/client';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 
 export const AccessibilityHub: React.FC = () => {
   const { user } = useAuth();
@@ -13,8 +16,6 @@ export const AccessibilityHub: React.FC = () => {
     setFontSize,
     contrastMode,
     setContrastMode,
-    targetLanguage,
-    setTargetLanguage,
     ttsEnabled,
     setTtsEnabled,
     speakText,
@@ -32,7 +33,6 @@ export const AccessibilityHub: React.FC = () => {
     profilesApi.getRecommendation(studentId)
       .then((res) => setRecommendation(res.data))
       .catch(() => {
-        // Fallback default recommendation if backend isn't loaded
         setRecommendation({
           recommended_mode: activeDisabilities[0] || 'visual_impairment',
           suggested_contrast: 'yellow-on-black',
@@ -50,7 +50,6 @@ export const AccessibilityHub: React.FC = () => {
       speakText(`Activated ${pLabel} accommodation mode.`);
     }
 
-    // Persist to backend
     accessibilityApi.createEvent({
       student_id: studentId,
       disability_profile: pId,
@@ -85,39 +84,39 @@ export const AccessibilityHub: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-100 flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-sky-400" /> Accessibility Adaptations Hub
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
+          <Sparkles className="w-5 h-5 text-sky-400" /> Accessibility Adaptations Hub
         </h1>
-        <p className="text-xs text-slate-400">Select your accommodation profiles to instantly tailor ClassAbly's visual, audio, and interaction systems</p>
+        <p className="text-xs text-slate-400 mt-1">Select your accommodation profiles to instantly tailor ClassAbly's visual, audio, and interaction systems</p>
       </div>
 
       {/* Adaptive Profile AI Recommendation Panel */}
-      <div className="card p-5 bg-gradient-to-r from-purple-950/40 via-sky-950/40 to-slate-900 border-purple-500/30">
-        <div className="flex items-center gap-2 text-xs font-mono text-purple-400 font-bold uppercase tracking-wider mb-2">
-          <Cpu className="w-4 h-4 text-purple-400" /> AI Adaptive Profile Recommendation
+      <Card variant="ai" className="p-5">
+        <div className="flex items-center gap-2 text-[10px] font-mono text-indigo-300 font-bold uppercase tracking-wider mb-2">
+          <Cpu className="w-4 h-4 text-indigo-400" /> AI Adaptive Profile Recommendation
         </div>
         {loadingRec ? (
-          <p className="text-xs text-slate-400">Analyzing environment and interaction history...</p>
+          <p className="text-xs text-slate-400 py-3">Analyzing environment and interaction history...</p>
         ) : (
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-slate-100 text-sm">
-                Recommended Accommodation Mode: <span className="text-sky-300 capitalize">{recommendation?.recommended_mode?.replace('_', ' ')}</span>
+              <h3 className="font-bold text-slate-100 text-sm tracking-tight">
+                Recommended Mode: <span className="text-sky-300 capitalize">{recommendation?.recommended_mode?.replace('_', ' ')}</span>
               </h3>
               <p className="text-xs text-slate-400 mt-1">
                 {recommendation?.reasoning || 'Engine recommends optimized contrast and TTS based on classroom sensors.'}
               </p>
             </div>
             {recommendation?.confidence_score && (
-              <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 text-[11px] font-bold border border-purple-500/40 shrink-0">
+              <Badge variant="ai" size="md">
                 {(recommendation.confidence_score * 100).toFixed(0)}% AI Match
-              </span>
+              </Badge>
             )}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Disability Selection Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -125,41 +124,38 @@ export const AccessibilityHub: React.FC = () => {
           const Icon = p.icon;
           const isActive = activeDisabilities.includes(p.id);
           return (
-            <div
+            <Card
               key={p.id}
+              variant={isActive ? 'ai' : 'interactive'}
               onClick={() => handleToggleProfile(p.id, p.label, isActive)}
-              className={`card p-5 cursor-pointer border-2 transition-all flex flex-col justify-between ${
-                isActive
-                  ? 'bg-sky-950/30 border-sky-500 text-sky-100 shadow-xl shadow-sky-500/10'
-                  : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700'
-              }`}
+              className={`p-5 cursor-pointer flex flex-col justify-between ${isActive ? 'border-sky-500/60 ring-1 ring-sky-500/30' : ''}`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`p-3 rounded-xl ${isActive ? 'bg-sky-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                    <Icon className="w-6 h-6" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className={`p-2.5 rounded-xl shrink-0 ${isActive ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-800 text-slate-400'}`}>
+                    <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-100 text-base">{p.label}</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">{p.desc}</p>
+                    <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{p.label}</h3>
+                    <p className="text-xs text-slate-400 mt-1">{p.desc}</p>
                   </div>
                 </div>
-                {isActive && <Check className="w-5 h-5 text-sky-400 shrink-0" />}
+                {isActive && <Check className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold">
+              <div className="mt-4 pt-3 border-t border-[#1b2538] flex items-center justify-between text-xs font-semibold">
                 <span className={isActive ? 'text-sky-400' : 'text-slate-500'}>
                   {isActive ? 'Accommodation Active' : 'Click to Activate'}
                 </span>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
 
       {/* Fine-Tuning Controls */}
-      <div className="card space-y-6">
-        <h3 className="font-bold text-slate-100 text-sm border-b border-slate-800 pb-3">
+      <Card variant="default" className="space-y-5">
+        <h3 className="font-bold text-slate-100 text-sm border-b border-[#1b2538] pb-3 tracking-tight">
           Fine-Tune Display & Speech Settings
         </h3>
 
@@ -169,17 +165,17 @@ export const AccessibilityHub: React.FC = () => {
             <label className="block text-xs font-semibold text-slate-300 mb-2">High Contrast Theme</label>
             <div className="space-y-2 text-xs">
               {[
-                { mode: 'none', label: 'Default Enterprise Theme' },
-                { mode: 'yellow-on-black', label: 'Black Background & High Gold Text' },
-                { mode: 'black-on-white', label: 'Pure White Background & High Black Text' },
+                { mode: 'none', label: 'Default Dark Theme' },
+                { mode: 'yellow-on-black', label: 'Black Background & Gold Text' },
+                { mode: 'black-on-white', label: 'White Background & Black Text' },
               ].map((item) => (
                 <button
                   key={item.mode}
                   onClick={() => handleContrastChange(item.mode)}
-                  className={`w-full p-2.5 rounded-lg border text-left font-semibold transition-all ${
+                  className={`w-full p-2.5 rounded-lg border text-left font-semibold transition-all duration-150 ${
                     contrastMode === item.mode
-                      ? 'bg-sky-600 border-sky-500 text-white'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      ? 'bg-sky-600 border-sky-500 text-white shadow-sm'
+                      : 'bg-[#080c14] border-[#1b2538] text-slate-300 hover:bg-[#121a2a]'
                   }`}
                 >
                   {item.label}
@@ -191,8 +187,11 @@ export const AccessibilityHub: React.FC = () => {
           {/* Speech Synthesis (TTS) Controls */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">Text-to-Speech Screen Narrator</label>
-            <div className="space-y-2">
-              <button
+            <div className="space-y-2.5">
+              <Button
+                variant={ttsEnabled ? 'primary' : 'secondary'}
+                size="md"
+                className="w-full"
                 onClick={() => {
                   const nextState = !ttsEnabled;
                   setTtsEnabled(nextState);
@@ -204,26 +203,34 @@ export const AccessibilityHub: React.FC = () => {
                     timestamp: new Date().toISOString(),
                   }).catch(() => {});
                 }}
-                className={`btn-primary w-full text-xs ${ttsEnabled ? 'bg-emerald-600 hover:bg-emerald-500' : ''}`}
               >
                 {ttsEnabled ? 'Narrator Active (Click to Disable)' : 'Enable Text-to-Speech Narrator'}
-              </button>
+              </Button>
 
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => speakText('ClassAbly Smart Classroom Accessibility Platform is fully functional.')}
-                  className="btn-secondary text-xs flex-1"
+                  className="flex-1"
+                  leftIcon={<Volume2 className="w-3.5 h-3.5 text-sky-400" />}
                 >
-                  <Volume2 className="w-4 h-4 text-sky-400" /> Test Narrator Voice
-                </button>
-                <button onClick={stopSpeech} className="btn-secondary text-xs p-2 text-rose-400">
-                  <VolumeX className="w-4 h-4" /> Stop
-                </button>
+                  Test Voice
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={stopSpeech}
+                  className="text-rose-400 hover:text-rose-300"
+                  leftIcon={<VolumeX className="w-3.5 h-3.5" />}
+                >
+                  Stop
+                </Button>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Student Profile Settings Card */}
       <ProfileSettingsSection />
@@ -267,15 +274,15 @@ const ProfileSettingsSection: React.FC = () => {
   };
 
   return (
-    <div className="card space-y-4 border-sky-500/30">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-sky-400" /> Student Profile & Classroom Settings
+    <Card variant="default" className="space-y-4">
+      <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
+        <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
+          <Sparkles className="w-4 h-4 text-sky-400" /> Profile & Classroom Settings
         </h3>
         {saveSuccess && (
-          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/30">
-            Profile Updated ✓
-          </span>
+          <Badge variant="success" size="sm">
+            Saved Successfully
+          </Badge>
         )}
       </div>
 
@@ -308,7 +315,7 @@ const ProfileSettingsSection: React.FC = () => {
           <select
             value={classroomId}
             onChange={(e) => setClassroomId(Number(e.target.value))}
-            className="input-field text-xs bg-slate-950 text-slate-200"
+            className="input-field text-xs bg-[#080c14] text-slate-200"
           >
             <option value={1}>Smart Classroom 1 (Main Block)</option>
             <option value={2}>Smart Classroom 2 (Science Block)</option>
@@ -317,12 +324,17 @@ const ProfileSettingsSection: React.FC = () => {
         </div>
 
         <div className="sm:col-span-3 flex justify-end pt-2">
-          <button type="submit" disabled={isSaving} className="btn-primary text-xs">
-            {isSaving ? 'Saving Changes...' : 'Update Profile Details'}
-          </button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={isSaving}
+            isLoading={isSaving}
+          >
+            Update Profile
+          </Button>
         </div>
       </form>
-    </div>
+    </Card>
   );
 };
-

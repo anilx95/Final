@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GraduationCap, Video, Sparkles, Mic, BookOpen, Clock, FolderDown, ChevronRight, Volume2, Award, CheckCircle, School, UserCheck } from 'lucide-react';
+import { Video, Sparkles, Mic, BookOpen, Clock, FolderDown, ChevronRight, Volume2, School, ArrowUpRight } from 'lucide-react';
 import { academicsApi, dashboardApi, lectureApi } from '../../api/client';
-import { TimetableItem, User } from '../../types';
+import { TimetableItem } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 
 export const StudentHome: React.FC = () => {
   const { user } = useAuth();
@@ -33,109 +36,142 @@ export const StudentHome: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Welcome Banner */}
-      <div className="card bg-gradient-to-r from-sky-900/60 via-purple-900/40 to-slate-900 border-sky-500/30 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <span className="text-[11px] uppercase font-bold text-sky-400 tracking-wider">Student Accessibility Portal</span>
-          <h1 className="text-2xl font-extrabold text-slate-100 mt-1">Welcome, {user?.full_name}!</h1>
-          <p className="text-xs text-slate-300 mt-1">Your adaptive learning workspace is active with {(activeDisabilities || []).length} active accommodations.</p>
-        </div>
+      <Card variant="ai" className="p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <Badge variant="brand" size="sm">
+                Student Accessibility Workspace
+              </Badge>
+              {(activeDisabilities || []).length > 0 && (
+                <Badge variant="ai" size="sm">
+                  <Sparkles className="w-3 h-3" /> {(activeDisabilities || []).length} Accommodations Active
+                </Badge>
+              )}
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
+              Welcome, {user?.full_name || 'Student'}!
+            </h1>
+            <p className="text-xs text-slate-400 mt-1 max-w-xl">
+              Your personalized accessible learning environment is active. Real-time neural translations, screen reading, and closed captions are ready.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => speakText(`Welcome back ${user?.full_name}. You have ${(timetable || []).length} classes scheduled today.`)}
-            className="btn-secondary text-xs"
-            title="Read Screen Aloud"
-          >
-            <Volume2 className="w-4 h-4 text-sky-400" /> Read Aloud
-          </button>
-          <Link to="/student/live-class" className="btn-primary text-xs whitespace-nowrap">
-            <Video className="w-4 h-4" /> Join Active Class
-          </Link>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => speakText(`Welcome back ${user?.full_name}. You have ${(timetable || []).length} classes scheduled today.`)}
+              leftIcon={<Volume2 className="w-4 h-4 text-sky-400" />}
+            >
+              Read Aloud
+            </Button>
+            <Link to="/student/live-class">
+              <Button variant="primary" size="sm" leftIcon={<Video className="w-4 h-4" />}>
+                Join Active Class
+              </Button>
+            </Link>
+          </div>
         </div>
-      </div>
+      </Card>
 
       {/* Accessibility Status Banner */}
-      <div className="card p-4 bg-slate-900/90 border-sky-500/30 flex items-center justify-between">
+      <Card variant="default" padding="sm" className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-sky-500/20 text-sky-300">
-            <Sparkles className="w-5 h-5" />
+          <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="font-bold text-slate-100 text-xs">Active Disability Profiles</h4>
+            <h4 className="font-bold text-slate-100 text-xs tracking-tight">Active Accessibility Profile</h4>
             <div className="flex flex-wrap gap-1.5 mt-1">
               {(!activeDisabilities || activeDisabilities.length === 0) ? (
-                <span className="text-[11px] text-slate-400">Standard View Mode</span>
+                <span className="text-[11px] text-slate-400">Standard View Mode (No specific accommodations active)</span>
               ) : (
                 (activeDisabilities || []).map((d) => (
-                  <span key={d} className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[10px] font-bold capitalize">
+                  <Badge key={d} variant="ai" size="sm">
                     {d.replace('_', ' ')}
-                  </span>
+                  </Badge>
                 ))
               )}
             </div>
           </div>
         </div>
 
-        <Link to="/student/accessibility" className="text-xs text-sky-400 font-semibold hover:underline">
-          Customize Adaptations
+        <Link to="/student/accessibility" className="text-xs text-sky-400 font-semibold hover:underline shrink-0">
+          Customize Adaptations &rarr;
         </Link>
-      </div>
+      </Card>
 
       {/* Main Student Shortcuts */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link to="/student/live-class" className="card p-5 hover:border-sky-500/50 transition-all group">
-          <div className="p-3 rounded-xl bg-sky-500/10 text-sky-400 w-fit mb-3 group-hover:scale-110 transition-transform">
-            <Video className="w-6 h-6" />
-          </div>
-          <h3 className="font-bold text-slate-100 text-sm">Join Live Classroom</h3>
-          <p className="text-xs text-slate-400 mt-1">View camera board OCR, live STT subtitles & real-time translations</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <Link to="/student/live-class" className="block group">
+          <Card variant="interactive" className="h-full">
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 group-hover:scale-105 transition-transform">
+                <Video className="w-5 h-5" />
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-sky-400 transition-colors" />
+            </div>
+            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Join Live Classroom</h3>
+            <p className="text-xs text-slate-400 mt-1">Live board stream, neural translations & interactive AI visualizer</p>
+          </Card>
         </Link>
 
-        <Link to="/student/voice-assistant" className="card p-5 hover:border-purple-500/50 transition-all group">
-          <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 w-fit mb-3 group-hover:scale-110 transition-transform">
-            <Mic className="w-6 h-6" />
-          </div>
-          <h3 className="font-bold text-slate-100 text-sm">Voice Command Studio</h3>
-          <p className="text-xs text-slate-400 mt-1">Control classroom lights, fans, projector, and call teacher hands-free</p>
+        <Link to="/student/voice-assistant" className="block group">
+          <Card variant="interactive" className="h-full">
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group-hover:scale-105 transition-transform">
+                <Mic className="w-5 h-5" />
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition-colors" />
+            </div>
+            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Voice Command Studio</h3>
+            <p className="text-xs text-slate-400 mt-1">Hands-free classroom control, question asking & accessibility calls</p>
+          </Card>
         </Link>
 
-        <Link to="/student/study-materials" className="card p-5 hover:border-emerald-500/50 transition-all group">
-          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit mb-3 group-hover:scale-110 transition-transform">
-            <FolderDown className="w-6 h-6" />
-          </div>
-          <h3 className="font-bold text-slate-100 text-sm">Study Materials & Notes</h3>
-          <p className="text-xs text-slate-400 mt-1">Download PDFs, generated AI summaries, and VTT lecture captions</p>
+        <Link to="/student/study-materials" className="block group">
+          <Card variant="interactive" className="h-full">
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-105 transition-transform">
+                <FolderDown className="w-5 h-5" />
+              </div>
+              <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-400 transition-colors" />
+            </div>
+            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Study Materials & Notes</h3>
+            <p className="text-xs text-slate-400 mt-1">Download AI summaries, lecture transcripts, and VTT caption files</p>
+          </Card>
         </Link>
       </div>
 
       {/* Live Faculty & Online Teachers Status */}
-      <div className="card space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-            <School className="w-4 h-4 text-emerald-400" /> Live Faculty & Department Educators ({(teachers || []).length})
+      <Card variant="default">
+        <div className="flex items-center justify-between border-b border-[#1b2538] pb-3 mb-4">
+          <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
+            <School className="w-4 h-4 text-emerald-400" /> Faculty & Department Educators ({(teachers || []).length})
           </h3>
-          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> Active Faculty Directory
-          </span>
+          <Badge variant="success" size="sm" dot pulse>
+            Active Directory
+          </Badge>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {loading ? (
-            <div className="col-span-full text-center py-4 text-slate-400 text-xs">Loading faculty list...</div>
+            <div className="col-span-full text-center py-8 text-slate-400 text-xs">Loading faculty list...</div>
           ) : (!teachers || teachers.length === 0) ? (
-            <div className="col-span-full text-center py-4 text-slate-400 text-xs">No faculty members found.</div>
+            <div className="col-span-full text-center py-8 text-slate-400 text-xs">No faculty members found.</div>
           ) : (
             (teachers || []).map((tch) => {
               const isLive = tch.is_live;
               return (
-                <div key={tch.id} className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 ${
-                      isLive ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' : 'bg-slate-800 border-slate-700 text-sky-400'
+                <div key={tch.id} className="p-3 rounded-xl bg-[#080c14] border border-[#1b2538] flex items-center justify-between gap-3 hover:border-slate-700 transition-colors">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg border flex items-center justify-center font-bold text-xs shrink-0 ${
+                      isLive ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'bg-slate-800 border-slate-700 text-sky-400'
                     }`}>
-                      {tch.full_name.charAt(0)}
+                      {tch.full_name?.charAt(0) || 'F'}
                     </div>
                     <div className="truncate">
                       <div className="font-bold text-slate-200 text-xs truncate">{tch.full_name}</div>
@@ -148,12 +184,12 @@ export const StudentHome: React.FC = () => {
                   {isLive ? (
                     <Link
                       to="/student/live-class"
-                      className="text-[10px] font-extrabold px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all shrink-0 flex items-center gap-1"
+                      className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all shrink-0 flex items-center gap-1"
                     >
                       <Video className="w-3 h-3 text-emerald-400 animate-pulse" /> Join Live
                     </Link>
                   ) : (
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase border shrink-0 ${
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase border shrink-0 font-mono ${
                       tch.is_active !== false
                         ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
                         : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -166,56 +202,58 @@ export const StudentHome: React.FC = () => {
             })
           )}
         </div>
-      </div>
+      </Card>
 
       {/* Today's Timetable */}
-      <div className="card space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
+      <Card variant="default">
+        <div className="flex items-center justify-between border-b border-[#1b2538] pb-3 mb-4">
+          <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
             <Clock className="w-4 h-4 text-sky-400" /> Today's Enrolled Classes
           </h3>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {loading ? (
             <div className="text-center py-8 text-slate-400 text-xs">Loading timetable...</div>
           ) : (!timetable || timetable.length === 0) ? (
             <div className="text-center py-8 text-slate-400 text-xs">No enrolled classes scheduled for today.</div>
           ) : (
             (timetable || []).map((slot, idx) => (
-              <div key={idx} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0">
+              <div key={idx} className="p-3.5 rounded-xl bg-[#080c14] border border-[#1b2538] flex items-center justify-between gap-4 hover:border-slate-700 transition-colors">
+                <div className="flex items-center gap-3.5">
+                  <div className="px-3 py-2 rounded-lg bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0 border border-sky-500/20">
                     {slot.time}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       {slot.subject_code && (
-                        <span className="text-xs font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                        <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                           {slot.subject_code}
                         </span>
                       )}
-                      <span className="font-bold text-slate-100 text-sm">{slot.subject_name}</span>
+                      <span className="font-bold text-slate-100 text-xs sm:text-sm">{slot.subject_name}</span>
                     </div>
                     {slot.topic && (
                       <div className="text-xs text-sky-300 mt-0.5 font-medium">
                         Topic: {slot.topic}
                       </div>
                     )}
-                    <div className="text-xs text-slate-400 mt-0.5">
+                    <div className="text-[11px] text-slate-400 mt-0.5">
                       Instructor: <strong className="text-slate-300">{slot.teacher_name || 'Faculty Instructor'}</strong> | Room: <strong className="text-slate-300">{slot.classroom}</strong>
                     </div>
                   </div>
                 </div>
 
-                <Link to="/student/live-class" className="btn-primary text-xs shrink-0">
-                  Join Lecture <ChevronRight className="w-3.5 h-3.5" />
+                <Link to="/student/live-class" className="shrink-0">
+                  <Button variant="primary" size="sm" rightIcon={<ChevronRight className="w-3.5 h-3.5" />}>
+                    Join Lecture
+                  </Button>
                 </Link>
               </div>
             ))
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

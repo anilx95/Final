@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { authApi } from '../../api/client';
+import { Button } from '../../components/ui/Button';
 
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Full name must be at least 2 characters'),
@@ -45,6 +46,7 @@ export const Register: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [sentToEmail, setSentToEmail] = useState('');
   const [cooldown, setCooldown] = useState(0);
 
   const {
@@ -98,6 +100,7 @@ export const Register: React.FC = () => {
     try {
       const res = await authApi.sendOtp(cleanEmail, 'register');
       setOtpSent(true);
+      setSentToEmail(cleanEmail);
       setCooldown(res.data.cooldown_seconds || 60);
       addToast({
         type: 'success',
@@ -116,18 +119,28 @@ export const Register: React.FC = () => {
   };
 
   const onSubmit = async (data: RegisterFormInputs) => {
-    if (!otpSent || !data.otp || data.otp.trim().length < 6) {
+    const currentEmail = (data.email || '').trim().toLowerCase();
+    if (!otpSent || sentToEmail !== currentEmail) {
       addToast({
         type: 'warning',
         title: 'Email Verification Required',
-        description: 'Please click "Send OTP" to receive and enter the 6-digit verification code.',
+        description: 'Please click "Send OTP" to receive a verification code for this email address.',
+      });
+      return;
+    }
+
+    if (!data.otp || data.otp.trim().length < 6) {
+      addToast({
+        type: 'warning',
+        title: 'Enter Verification Code',
+        description: 'Please enter the 6-digit verification code received on your email.',
       });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const role = await registerWithOtp(data);
+      const role = await registerWithOtp({ ...data, email: currentEmail, otp: data.otp.trim() });
       addToast({
         type: 'success',
         title: 'Account Registered Successfully',
@@ -149,17 +162,17 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 py-8 relative overflow-hidden">
+    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-4 py-8 relative overflow-hidden">
       <div className="w-full max-w-xl relative z-10">
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 mx-auto flex items-center justify-center text-white font-black text-xl shadow-xl shadow-sky-500/20 mb-2">
             C
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-100">Create ClassAbly Account</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">Create ClassAbly Account</h1>
           <p className="text-xs text-slate-400 mt-1">Join the Smart Classroom Accessibility Network</p>
         </div>
 
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-6 sm:p-8 shadow-2xl">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Role Selection Tabs */}
             <div>
@@ -176,10 +189,10 @@ export const Register: React.FC = () => {
                       type="button"
                       key={item.role}
                       onClick={() => setValue('role', item.role as 'student' | 'teacher')}
-                      className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all duration-150 ${
                         isSelected
-                          ? 'bg-sky-600/20 border-sky-500 text-sky-200 shadow-lg shadow-sky-500/10'
-                          : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
+                          ? 'bg-sky-500/10 border-sky-500 text-sky-200 shadow-sm'
+                          : 'bg-[#080c14] border-[#1b2538] text-slate-400 hover:border-slate-700'
                       }`}
                     >
                       <Icon className="w-5 h-5" />
@@ -200,7 +213,7 @@ export const Register: React.FC = () => {
                     type="text"
                     placeholder="Jane Doe"
                     {...register('full_name')}
-                    className="input-field pl-10"
+                    className="input-field pl-10 text-xs"
                   />
                 </div>
                 {errors.full_name && <p className="text-xs text-rose-400 mt-1">{errors.full_name.message}</p>}
@@ -215,7 +228,7 @@ export const Register: React.FC = () => {
                       type="email"
                       placeholder="jane@gmail.com"
                       {...register('email')}
-                      className="input-field pl-10"
+                      className="input-field pl-10 text-xs"
                     />
                   </div>
                   <button
@@ -223,7 +236,7 @@ export const Register: React.FC = () => {
                     onClick={handleSendRegistrationOtp}
                     disabled={isSendingOtp || cooldown > 0 || !watchedEmail}
                     title="Send verification code to this Gmail address"
-                    className="px-3 py-2 rounded-xl bg-sky-600/20 border border-sky-500/40 text-sky-300 hover:bg-sky-600/30 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center gap-1.5 transition-all"
+                    className="px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:bg-sky-500/20 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center gap-1.5 transition-all"
                   >
                     {isSendingOtp ? (
                       <div className="w-3.5 h-3.5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
@@ -264,7 +277,7 @@ export const Register: React.FC = () => {
                   maxLength={6}
                   placeholder="Enter 6-digit code received on Gmail"
                   {...register('otp')}
-                  className="input-field pl-10 font-mono tracking-wider font-bold text-sky-300"
+                  className="input-field pl-10 font-mono tracking-wider font-bold text-sky-300 text-xs"
                 />
               </div>
               {errors.otp && <p className="text-xs text-rose-400 mt-1">{errors.otp.message}</p>}
@@ -286,7 +299,7 @@ export const Register: React.FC = () => {
                   type="text"
                   placeholder="e.g. Stanford University / MIT College of Engineering"
                   {...register('college_name')}
-                  className="input-field pl-10"
+                  className="input-field pl-10 text-xs"
                 />
               </div>
               {errors.college_name && <p className="text-xs text-rose-400 mt-1">{errors.college_name.message}</p>}
@@ -302,7 +315,7 @@ export const Register: React.FC = () => {
                     type="password"
                     placeholder="••••••••"
                     {...register('password')}
-                    className="input-field pl-10"
+                    className="input-field pl-10 text-xs"
                   />
                 </div>
                 {errors.password && <p className="text-xs text-rose-400 mt-1">{errors.password.message}</p>}
@@ -316,7 +329,7 @@ export const Register: React.FC = () => {
                     type="text"
                     placeholder="+1 555-0199"
                     {...register('phone')}
-                    className="input-field pl-10"
+                    className="input-field pl-10 text-xs"
                   />
                 </div>
               </div>
@@ -330,7 +343,7 @@ export const Register: React.FC = () => {
                     type="text"
                     placeholder="STU-88421"
                     {...register('roll_number')}
-                    className="input-field"
+                    className="input-field text-xs"
                   />
                 </div>
 
@@ -348,10 +361,10 @@ export const Register: React.FC = () => {
                       <label
                         key={d.id}
                         onClick={() => handleDisabilityToggle(d.id)}
-                        className={`p-2.5 rounded-lg border cursor-pointer flex items-center gap-2 transition-all ${
+                        className={`p-2.5 rounded-lg border cursor-pointer flex items-center gap-2 transition-all duration-150 ${
                           selectedDisabilities.includes(d.id)
                             ? 'bg-sky-500/20 border-sky-500 text-sky-300 font-semibold'
-                            : 'bg-slate-950/40 border-slate-800 text-slate-400'
+                            : 'bg-[#080c14] border-[#1b2538] text-slate-400'
                         }`}
                       >
                         <input
@@ -375,23 +388,25 @@ export const Register: React.FC = () => {
                   type="text"
                   placeholder="EMP-9021"
                   {...register('employee_id')}
-                  className="input-field"
+                  className="input-field text-xs"
                 />
               </div>
             )}
 
-            <button type="submit" disabled={isSubmitting} className="btn-primary w-full mt-2">
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  Verify OTP & Create Account <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              isLoading={isSubmitting}
+              variant="primary"
+              size="md"
+              className="w-full mt-2"
+              rightIcon={<ArrowRight className="w-4 h-4" />}
+            >
+              Verify OTP & Create Account
+            </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+          <div className="mt-6 pt-6 border-t border-[#1b2538] text-center">
             <p className="text-xs text-slate-400">
               Already registered?{' '}
               <Link to="/login" className="text-sky-400 font-semibold hover:underline">

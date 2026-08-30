@@ -111,7 +111,6 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(auth_router, prefix="/api")
-app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(academics_router)
 app.include_router(export_router)

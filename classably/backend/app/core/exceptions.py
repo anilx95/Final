@@ -19,6 +19,7 @@ def error_response(
         content={
             "success": False,
             "message": message,
+            "detail": message,  # Frontend reads err.response.data.detail
             "error_code": error_code,
             "timestamp": datetime.utcnow().isoformat(),
         },
@@ -98,8 +99,17 @@ async def not_found_handler(
     request: Request,
     exc,
 ):
+    status_code = getattr(exc, "status_code", HTTP_404_NOT_FOUND)
+    detail = getattr(exc, "detail", "Not Found")
+    if status_code == HTTP_404_NOT_FOUND:
+        return error_response(
+            HTTP_404_NOT_FOUND,
+            str(detail) if detail else "Not Found",
+            "NOT_FOUND",
+        )
+    # Non-404 StarletteHTTPExceptions: preserve original status & detail
     return error_response(
-        HTTP_404_NOT_FOUND,
-        "Not Found",
-        "NOT_FOUND",
+        status_code,
+        str(detail),
+        "HTTP_ERROR",
     )

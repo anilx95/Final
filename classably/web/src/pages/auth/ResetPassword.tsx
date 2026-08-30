@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Lock, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { authApi } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { Button } from '../../components/ui/Button';
 
 export const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -39,9 +40,9 @@ export const ResetPassword: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-6 sm:p-8 shadow-2xl">
           <Link to="/login" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Sign In
           </Link>
@@ -50,7 +51,7 @@ export const ResetPassword: React.FC = () => {
             <ShieldCheck className="w-6 h-6" />
           </div>
 
-          <h2 className="text-xl font-bold text-slate-100">Set New Password</h2>
+          <h2 className="text-xl font-bold text-slate-100 tracking-tight">Set New Password</h2>
           <p className="text-xs text-slate-400 mt-1 mb-6">
             Enter your reset token and new account password below.
           </p>
@@ -64,7 +65,7 @@ export const ResetPassword: React.FC = () => {
                 placeholder="UUID Token"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                className="input-field"
+                className="input-field text-xs font-mono"
               />
             </div>
 
@@ -78,18 +79,21 @@ export const ResetPassword: React.FC = () => {
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="input-field pl-10"
+                  className="input-field pl-10 text-xs"
                 />
               </div>
             </div>
 
-            <button type="submit" disabled={isSubmitting} className="btn-primary w-full">
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                'Update Password'
-              )}
-            </button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              isLoading={isSubmitting}
+              variant="primary"
+              size="md"
+              className="w-full"
+            >
+              Update Password
+            </Button>
           </form>
         </div>
       </div>

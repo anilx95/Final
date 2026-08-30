@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { HelpCircle, CheckCircle2, Clock, MessageSquare } from 'lucide-react';
+import { HelpCircle, CheckCircle2, MessageSquare, Hand } from 'lucide-react';
 import { lectureApi, assistApi } from '../../api/client';
-import { RaiseHandItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 export const StudentRequests: React.FC = () => {
   const { addToast } = useToast();
@@ -59,36 +62,54 @@ export const StudentRequests: React.FC = () => {
     } catch (err) {}
   };
 
-
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-100 flex items-center gap-2">
-          <HelpCircle className="w-6 h-6 text-amber-400" /> Student Raised-Hand & Assistance Queue
-        </h1>
-        <p className="text-xs text-slate-400">Live student queries, accessibility support calls, and raised hands during active lectures</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
+            <HelpCircle className="w-5 h-5 text-amber-400" /> Student Raised-Hand Queue
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">Live student doubts, accessibility support calls, and raised hands</p>
+        </div>
+
+        <Badge variant="warning" size="md">
+          {requests.length} Pending Requests
+        </Badge>
       </div>
 
       <div className="space-y-3">
         {loading ? (
-          <div className="card text-center py-8 text-slate-400 text-xs">Loading queue...</div>
-        ) : (!requests || requests.length === 0) ? (
-          <div className="card text-center py-12 text-slate-400 text-xs">No active student assistance requests in queue.</div>
+          <div className="text-center py-16 text-slate-400 text-xs">Loading queue...</div>
+        ) : requests.length === 0 ? (
+          <EmptyState
+            icon={<Hand className="w-6 h-6 text-slate-400" />}
+            title="No Active Requests"
+            description="All student questions and assistance calls are currently resolved."
+          />
         ) : (
-          (requests || []).map((r) => (
-            <div key={r.id} className="card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-amber-500/30">
+          requests.map((r) => (
+            <Card key={`${r.type}-${r.id}`} variant="default" className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-amber-500/25">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-100 text-sm">{r.student_name}</span>
+                  <Badge variant={r.type === 'raise_hand' ? 'warning' : 'ai'} size="sm">
+                    {r.type === 'raise_hand' ? 'Raised Hand' : 'Assistance Call'}
+                  </Badge>
+                  <span className="font-bold text-slate-100 text-sm tracking-tight">{r.student_name}</span>
                   <span className="text-[10px] text-slate-400 font-mono">{r.created_at}</span>
                 </div>
-                <p className="text-xs text-slate-300 mt-1">{r.question_text}</p>
+                <p className="text-xs text-slate-300 mt-1.5">{r.question_text || 'Student requested attention.'}</p>
               </div>
 
-              <button onClick={() => handleResolve(r)} className="btn-primary text-xs shrink-0 py-1.5">
-                <CheckCircle2 className="w-4 h-4" /> Mark Resolved
-              </button>
-            </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleResolve(r)}
+                className="shrink-0"
+                leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+              >
+                Mark Resolved
+              </Button>
+            </Card>
           ))
         )}
       </div>

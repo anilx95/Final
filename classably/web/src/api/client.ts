@@ -90,10 +90,12 @@ export const lectureApi = {
   getAllActiveSessions: () => api.get('/api/lecture-session/active-sessions'),
   getTeachers: () => api.get('/api/lecture-session/teachers'),
   endSession: (sessionId: number) => api.post(`/api/lecture-session/end/${sessionId}`),
-  ingestSubtitle: (data: { session_id: number; text: string; speaker_name?: string; target_lang?: string }) =>
+  ingestSubtitle: (data: { session_id: number; text: string; speaker_name?: string; target_lang?: string; id?: number; broadcast?: boolean }) =>
     api.post('/api/lecture-session/subtitles/ingest', data),
   getSubtitles: (sessionId: number, targetLang = 'en') =>
     api.get(`/api/lecture-session/subtitles/${sessionId}`, { params: { target_lang: targetLang } }),
+  translate: (data: { text: string; target_lang: string }) =>
+    api.post('/api/lecture-session/translate', data),
   raiseHand: (data: { session_id: number; student_id?: number; question_text?: string }) =>
     api.post('/api/lecture-session/raise-hand', data),
   getRaiseHandQueue: (sessionId: number) => api.get(`/api/lecture-session/raise-hand/${sessionId}`),

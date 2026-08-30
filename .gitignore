@@ -156,6 +156,8 @@ scratch_20_users.json
 *~
 
 # --- IDEs, Editors & Operating System ---
+.agents/
+*/.agents/
 .vscode/
 */.vscode/
 .idea/

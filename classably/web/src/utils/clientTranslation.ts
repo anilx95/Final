@@ -1,6 +1,29 @@
+import { lectureApi } from '../api/client';
+
 // Client-side translation engine with ultra-fast memory cache, async neural translation, and rich educational dictionary
 const IN_MEMORY_CACHE = new Map<string, string>();
 const IN_FLIGHT_PROMISES = new Map<string, Promise<string>>();
+
+function isValidTranslation(result: string | null | undefined, original: string): boolean {
+  if (!result || typeof result !== 'string') return false;
+  const r = result.trim().toLowerCase();
+  if (
+    !r ||
+    r === original.trim().toLowerCase() ||
+    r.includes('error 500') ||
+    r.includes('<html') ||
+    r.includes('<!doctype') ||
+    r.includes("that’s an error") ||
+    r.includes("that's an error") ||
+    r.includes('invalid source language') ||
+    r.includes('mymemory warning') ||
+    r.includes('too many requests') ||
+    r.includes('quota exceeded')
+  ) {
+    return false;
+  }
+  return true;
+}
 
 // Rich offline dictionary for common educational terms across major languages
 const DICTIONARY: Record<string, Record<string, string>> = {
@@ -10,11 +33,14 @@ const DICTIONARY: Record<string, Record<string, string>> = {
     "welcome": "स्वागत है",
     "welcome to class": "कक्षा में आपका स्वागत है",
     "welcome to the class": "कक्षा में आपका स्वागत है",
+    "hello welcome to class": "नमस्ते कक्षा में आपका स्वागत है",
     "good morning": "सुप्रभात",
     "good afternoon": "शुभ दोपहर",
     "good evening": "शुभ संध्या",
     "let us begin": "आइए शुरू करते हैं",
     "let's begin": "आइए शुरू करते हैं",
+    "let us start": "आइए शुरू करते हैं",
+    "let's start": "आइए शुरू करते हैं",
     "today we will learn": "आज हम सीखेंगे",
     "today's topic": "आज का विषय",
     "lecture": "व्याख्यान",
@@ -53,6 +79,9 @@ const DICTIONARY: Record<string, Record<string, string>> = {
     "doubt": "संदेह",
     "hand raised": "हाथ उठाया",
     "subtitles": "उपशीर्षक",
+    "step by step formula derivation": "चरण दर चरण सूत्र व्युत्पत्ति",
+    "overview of core principles": "मूल सिद्धांतों का अवलोकन",
+    "real world applications": "वास्तविक दुनिया के अनुप्रयोग",
   },
   te: {
     "hello": "నమస్కారం",
@@ -60,11 +89,14 @@ const DICTIONARY: Record<string, Record<string, string>> = {
     "welcome": "స్వాగతం",
     "welcome to class": "తరగతికి స్వాగతం",
     "welcome to the class": "తరగతికి స్వాగతం",
+    "hello welcome to class": "హలో తరగతికి స్వాగతం",
     "good morning": "శుభోదయం",
     "good afternoon": "శుభ మధ్యాహ్నం",
     "good evening": "శుభ సాయంత్రం",
     "let us begin": "మనం ప్రారంభిద్దాం",
     "let's begin": "మనం ప్రారంభిద్దాం",
+    "let us start": "మనం ప్రారంభిద్దాం",
+    "let's start": "మనం ప్రారంభిద్దాం",
     "today we will learn": "ఈరోజు మనం నేర్చుకుంటాము",
     "today's topic": "ఈనాటి అంశం",
     "lecture": "పాఠం",
@@ -103,6 +135,9 @@ const DICTIONARY: Record<string, Record<string, string>> = {
     "doubt": "సందేహం",
     "hand raised": "చేయి పైకెత్తారు",
     "subtitles": "శీర్షికలు",
+    "step by step formula derivation": "దశలవారీ ఫార్ములా ఉత్పాదన",
+    "overview of core principles": "ముఖ్య సూత్రాల అవలోకనం",
+    "real world applications": "రియల్ వరల్డ్ అప్లికేషన్లు",
   },
   ta: {
     "hello": "வணக்கம்",
@@ -111,58 +146,187 @@ const DICTIONARY: Record<string, Record<string, string>> = {
     "welcome to class": "வகுப்பிற்கு வரவேற்கிறோம்",
     "good morning": "காலை வணக்கம்",
     "good afternoon": "மதிய வணக்கம்",
+    "good evening": "மாலை வணக்கம்",
     "let us begin": "தொடங்குவோம்",
+    "let's begin": "தொடங்குவோம்",
     "today we will learn": "இன்று நாம் கற்போம்",
+    "today's topic": "இன்றைய தலைப்பு",
     "lecture": "விரிவுரை",
     "class": "வகுப்பு",
     "student": "மாணவர்",
+    "students": "மாணவர்கள்",
     "teacher": "ஆசிரியர்",
     "thank you": "நன்றி",
+    "thank you very much": "மிக்க நன்றி",
     "artificial intelligence": "செயற்கை நுண்ணறிவு",
+    "machine learning": "இயந்திர கற்றல்",
+    "subtitles": "துணைத்தலைப்புகள்",
+  },
+  kn: {
+    "hello": "ನಮಸ್ಕಾರ",
+    "welcome": "ಸ್ವಾಗತ",
+    "welcome to class": "ತರಗತಿಗೆ ಸ್ವಾಗತ",
+    "good morning": "ಶುಭೋದಯ",
+    "let us begin": "ಪ್ರಾರಂಭಿಸೋಣ",
+    "today we will learn": "ಇಂದು ನಾವು ಕಲಿಯುತ್ತೇವೆ",
+    "lecture": "ಉಪನ್ಯಾಸ",
+    "class": "ತರಗತಿ",
+    "student": "ವಿದ್ಯಾರ್ಥಿ",
+    "teacher": "ಶಿಕ್ಷಕ",
+    "thank you": "ಧನ್ಯವಾದಗಳು",
+    "artificial intelligence": "ಕೃತಕ ಬುದ್ಧಿಮತ್ತೆ",
+  },
+  ml: {
+    "hello": "നമസ്കാരം",
+    "welcome": "സ്വാഗതം",
+    "welcome to class": "ക്ലാസ്സിലേക്ക് സ്വാഗതം",
+    "good morning": "സുപ്രഭാതം",
+    "let us begin": "നമുക്ക് തുടങ്ങാം",
+    "today we will learn": "ഇന്ന് നമ്മൾ പഠിക്കും",
+    "lecture": "പ്രഭാഷണം",
+    "class": "ക്ലാസ്സ്",
+    "student": "വിദ്യാർത്ഥി",
+    "teacher": "അധ്യാപകൻ",
+    "thank you": "നന്ദി",
+    "artificial intelligence": "കൃത്രിമ ബുദ്ധി",
+  },
+  mr: {
+    "hello": "नमस्कार",
+    "welcome": "स्वागत आहे",
+    "welcome to class": "वर्गात आपले स्वागत आहे",
+    "good morning": "शुभ प्रभात",
+    "let us begin": "सुरु करूया",
+    "today we will learn": "आज आपण शिकणार आहोत",
+    "lecture": "व्याख्यान",
+    "class": "वर्ग",
+    "student": "विद्यार्थी",
+    "teacher": "शिक्षक",
+    "thank you": "धन्यवाद",
+    "artificial intelligence": "कृत्रिम बुद्धिमत्ता",
+  },
+  bn: {
+    "hello": "হ্যালো",
+    "welcome": "স্বাগতম",
+    "welcome to class": "ক্লাসে স্বাগতম",
+    "good morning": "সুপ্রভাত",
+    "let us begin": "চলুন শুরু করি",
+    "today we will learn": "আজ আমরা শিখব",
+    "lecture": "বক্তৃতা",
+    "class": "ক্লাস",
+    "student": "ছাত্র",
+    "teacher": "শিক্ষক",
+    "thank you": "ধন্যবাদ",
+    "artificial intelligence": "কৃত্রিম বুদ্ধিমত্তা",
+  },
+  gu: {
+    "hello": "નમસ્તે",
+    "welcome": "સ્વાગત છે",
+    "welcome to class": "વર્ગમાં આપનું સ્વાગત છે",
+    "good morning": "સુપ્રભાત",
+    "let us begin": "ચાલો શરૂ કરીએ",
+    "today we will learn": "આજે આપણે શીખીશું",
+    "lecture": "વ્યાખ્યાન",
+    "class": "વર્ગ",
+    "student": "વિદ્યાર્થી",
+    "teacher": "શિક્ષક",
+    "thank you": "આભાર",
+    "artificial intelligence": "કૃત્રિમ બુદ્ધિ",
+  },
+  pa: {
+    "hello": "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ",
+    "welcome": "ਜੀ ਆਇਆਂ ਨੂੰ",
+    "welcome to class": "ਕਲਾਸ ਵਿੱਚ ਜੀ ਆਇਆਂ ਨੂੰ",
+    "good morning": "ਸ਼ੁਭ ਸਵੇਰ",
+    "let us begin": "ਆਓ ਸ਼ੁਰੂ ਕਰੀਏ",
+    "today we will learn": "ਅੱਜ ਅਸੀਂ ਸਿੱਖਾਂਗੇ",
+    "lecture": "ਲੈਕਚਰ",
+    "class": "ਕਲਾਸ",
+    "student": "ਵਿਦਿਆਰਥੀ",
+    "teacher": "ਅਧਿਆਪਕ",
+    "thank you": "ਧੰਨਵਾਦ",
+    "artificial intelligence": "ਨਕਲੀ ਬੁੱਧੀ",
+  },
+  ur: {
+    "hello": "ہیلو",
+    "welcome": "خوش آمدید",
+    "welcome to class": "کلاس میں خوش آمدید",
+    "good morning": "صبح بخیر",
+    "let us begin": "آئیے شروع کریں",
+    "today we will learn": "آج ہم سیکھیں گے",
+    "lecture": "لیکچر",
+    "class": "کلاس",
+    "student": "طالب علم",
+    "teacher": "استاد",
+    "thank you": "شکریہ",
+    "artificial intelligence": "مصنوعی ذہانت",
   },
   es: {
     "hello": "Hola",
+    "hi": "Hola",
     "welcome": "Bienvenido",
     "welcome to class": "Bienvenidos a clase",
+    "welcome to the class": "Bienvenidos a la clase",
     "good morning": "Buenos días",
     "good afternoon": "Buenas tardes",
+    "good evening": "Buenas noches",
     "let us begin": "Empecemos",
+    "let's begin": "Empecemos",
     "today we will learn": "Hoy aprenderemos",
     "lecture": "Conferencia",
     "class": "Clase",
+    "classroom": "Aula",
     "student": "Estudiante",
+    "students": "Estudiantes",
     "teacher": "Profesor",
     "thank you": "Gracias",
+    "thank you very much": "Muchas gracias",
     "artificial intelligence": "Inteligencia Artificial",
+    "subtitles": "Subtítulos",
   },
   fr: {
     "hello": "Bonjour",
+    "hi": "Salut",
     "welcome": "Bienvenue",
     "welcome to class": "Bienvenue en classe",
+    "welcome to the class": "Bienvenue dans la classe",
     "good morning": "Bonjour",
     "good afternoon": "Bon après-midi",
+    "good evening": "Bonsoir",
     "let us begin": "Commençons",
+    "let's begin": "Commençons",
     "today we will learn": "Aujourd'hui, nous allons apprendre",
     "lecture": "Cours",
     "class": "Classe",
+    "classroom": "Salle de classe",
     "student": "Étudiant",
+    "students": "Étudiants",
     "teacher": "Enseignant",
     "thank you": "Merci",
+    "thank you very much": "Merci beaucoup",
     "artificial intelligence": "Intelligence Artificielle",
+    "subtitles": "Sous-titres",
   },
   de: {
     "hello": "Hallo",
+    "hi": "Hallo",
     "welcome": "Willkommen",
     "welcome to class": "Willkommen im Unterricht",
+    "welcome to the class": "Willkommen in der Klasse",
     "good morning": "Guten Morgen",
+    "good afternoon": "Guten Tag",
+    "good evening": "Guten Abend",
     "let us begin": "Fangen wir an",
+    "let's begin": "Fangen wir an",
     "today we will learn": "Heute lernen wir",
     "lecture": "Vorlesung",
     "class": "Klasse",
     "student": "Student",
+    "students": "Studenten",
     "teacher": "Lehrer",
     "thank you": "Danke",
+    "thank you very much": "Vielen Dank",
     "artificial intelligence": "Künstliche Intelligenz",
+    "subtitles": "Untertitel",
   },
   ja: {
     "hello": "こんにちは",
@@ -220,6 +384,20 @@ const DICTIONARY: Record<string, Record<string, string>> = {
     "thank you": "شكراً",
     "artificial intelligence": "الذكاء الاصطناعي",
   },
+  ru: {
+    "hello": "Здравствуйте",
+    "welcome": "Добро пожаловать",
+    "welcome to class": "Добро пожаловать на урок",
+    "good morning": "Доброе утро",
+    "let us begin": "Давайте начнем",
+    "today we will learn": "Сегодня мы узнаем",
+    "lecture": "Лекция",
+    "class": "Класс",
+    "student": "Студент",
+    "teacher": "Учитель",
+    "thank you": "Спасибо",
+    "artificial intelligence": "Искусственный интеллект",
+  },
 };
 
 function normalizeLangCode(lang: string): string {
@@ -245,14 +423,69 @@ export function getCachedTranslation(text: string, targetLang: string): string |
 
   const cacheKey = getCacheKey(clean, code);
   if (IN_MEMORY_CACHE.has(cacheKey)) {
-    return IN_MEMORY_CACHE.get(cacheKey)!;
+    const cached = IN_MEMORY_CACHE.get(cacheKey)!;
+    if (isValidTranslation(cached, clean)) {
+      return cached;
+    }
   }
 
   const dict = DICTIONARY[code] || DICTIONARY[code.toLowerCase()];
-  if (dict && dict[clean.toLowerCase()]) {
-    const res = dict[clean.toLowerCase()];
-    IN_MEMORY_CACHE.set(cacheKey, res);
-    return res;
+  if (dict) {
+    const lowered = clean.toLowerCase();
+    if (dict[lowered]) {
+      const res = dict[lowered];
+      IN_MEMORY_CACHE.set(cacheKey, res);
+      return res;
+    }
+
+    // Phrase-level dictionary fallback for instant 0ms draft
+    let matched = false;
+    let draft = lowered;
+    const keys = Object.keys(dict).sort((a, b) => b.length - a.length);
+    for (const phrase of keys) {
+      if (draft.includes(phrase)) {
+        draft = draft.split(phrase).join(dict[phrase]);
+        matched = true;
+      }
+    }
+    if (matched && draft !== lowered) {
+      return draft;
+    }
+  }
+
+  return null;
+}
+
+export function getOrDraftTranslation(text: string, targetLang: string): string | null {
+  const clean = (text || '').trim();
+  if (!clean) return '';
+  const code = normalizeLangCode(targetLang);
+  if (!code || code.toLowerCase() === 'en' || code.toLowerCase() === 'english') {
+    return clean;
+  }
+
+  // 1. Direct cached translation
+  const cached = getCachedTranslation(clean, code);
+  if (cached && isValidTranslation(cached, clean)) {
+    return cached;
+  }
+
+  // 2. Sub-phrase & word replacement draft
+  const dict = DICTIONARY[code] || DICTIONARY[code.toLowerCase()];
+  if (dict) {
+    const lowered = clean.toLowerCase();
+    let draft = lowered;
+    let replacedAny = false;
+    const keys = Object.keys(dict).sort((a, b) => b.length - a.length);
+    for (const phrase of keys) {
+      if (draft.includes(phrase)) {
+        draft = draft.split(phrase).join(dict[phrase]);
+        replacedAny = true;
+      }
+    }
+    if (replacedAny && draft !== lowered) {
+      return draft;
+    }
   }
 
   return null;
@@ -273,11 +506,13 @@ export function translateClientText(text: string, targetLang: string): string {
     return cached;
   }
 
+  // Check draft translation for 0ms non-English rendering
+  const draft = getOrDraftTranslation(clean, targetLang);
+
   // Trigger background async translation without blocking
   translateClientTextAsync(clean, targetLang).catch(() => {});
 
-  // Return empty string or cached rather than returning English gibberish
-  return clean;
+  return draft || clean;
 }
 
 export async function translateClientTextAsync(text: string, targetLang: string): Promise<string> {
@@ -290,14 +525,17 @@ export async function translateClientTextAsync(text: string, targetLang: string)
   const cacheKey = getCacheKey(clean, code);
 
   if (IN_MEMORY_CACHE.has(cacheKey)) {
-    return IN_MEMORY_CACHE.get(cacheKey)!;
+    const cached = IN_MEMORY_CACHE.get(cacheKey)!;
+    if (isValidTranslation(cached, clean)) {
+      return cached;
+    }
   }
 
   if (IN_FLIGHT_PROMISES.has(cacheKey)) {
     return IN_FLIGHT_PROMISES.get(cacheKey)!;
   }
 
-  const promise = (async () => {
+  const promise = (async (): Promise<string> => {
     // 1. Check exact dictionary match
     const dict = DICTIONARY[code] || DICTIONARY[code.toLowerCase()];
     if (dict && dict[clean.toLowerCase()]) {
@@ -306,41 +544,61 @@ export async function translateClientTextAsync(text: string, targetLang: string)
       return result;
     }
 
-    // 2. High-speed Direct Google Translate GTX API
+    // 2. High-speed Direct Google Translate GTX API (Ultra-low latency ~20-50ms)
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(code)}&dt=t&q=${encodeURIComponent(clean)}`;
-      const res = await fetch(url, { method: 'GET' });
+      const res = await fetch(url, { method: 'GET', signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
         if (data && data[0] && Array.isArray(data[0])) {
           const translated = data[0].map((item: any) => item[0]).filter(Boolean).join('').trim();
-          if (translated) {
+          if (isValidTranslation(translated, clean)) {
             IN_MEMORY_CACHE.set(cacheKey, translated);
             return translated;
           }
         }
       }
     } catch {
-      // Fallback to backend API
+      // Fallback to backend service
     }
 
-    // 3. Fallback to ClassAbly backend translation endpoint
+    // 3. ClassAbly Backend Neural Translation Service
     try {
-      const res = await fetch('/api/lecture-session/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: clean, target_lang: code }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.translated_text && data.translated_text.trim()) {
-          const result = data.translated_text.trim();
+      const res = await lectureApi.translate({ text: clean, target_lang: code });
+      if (res.data && res.data.translated_text) {
+        const result = res.data.translated_text.trim();
+        if (isValidTranslation(result, clean)) {
           IN_MEMORY_CACHE.set(cacheKey, result);
           return result;
         }
       }
     } catch {
-      // Ignore network errors
+      // Fallback
+    }
+
+    // 4. High-speed MyMemory Translation API with explicit en source
+    try {
+      const mmUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(clean)}&langpair=en|${encodeURIComponent(code)}`;
+      const res = await fetch(mmUrl, { method: 'GET' });
+      if (res.ok) {
+        const data = await res.json();
+        const translated = (data?.responseData?.translatedText || '').trim();
+        if (isValidTranslation(translated, clean)) {
+          IN_MEMORY_CACHE.set(cacheKey, translated);
+          return translated;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    // 5. Offline phrase-level dictionary fallback
+    const phraseDraft = getOrDraftTranslation(clean, code);
+    if (phraseDraft && isValidTranslation(phraseDraft, clean)) {
+      return phraseDraft;
     }
 
     return clean;
@@ -354,4 +612,3 @@ export async function translateClientTextAsync(text: string, targetLang: string)
     IN_FLIGHT_PROMISES.delete(cacheKey);
   }
 }
-

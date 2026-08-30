@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, CheckCircle2, FileCheck } from 'lucide-react';
+import { Bell, CheckCircle2 } from 'lucide-react';
 import { notificationsApi } from '../api/client';
 import { NotificationItem } from '../types';
 import { useToast } from '../context/ToastContext';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { EmptyState } from '../components/ui/EmptyState';
 
 export const NotificationsPage: React.FC = () => {
   const { addToast } = useToast();
@@ -13,7 +16,7 @@ export const NotificationsPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await notificationsApi.getNotifications();
-      setNotifications(res.data);
+      setNotifications(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -42,29 +45,32 @@ export const NotificationsPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-100 flex items-center gap-2">
-          <Bell className="w-6 h-6 text-sky-400" /> Notifications Inbox
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
+          <Bell className="w-5 h-5 text-sky-400" /> Notifications Inbox
         </h1>
-        <p className="text-xs text-slate-400">Class schedule updates, OCR board scan alerts, and system notifications</p>
+        <p className="text-xs text-slate-400 mt-1">Class schedule updates, OCR board scan alerts, and system notifications</p>
       </div>
 
       <div className="space-y-3">
         {loading ? (
-          <div className="card text-center py-8 text-slate-400 text-xs">Loading notifications...</div>
+          <div className="text-center py-16 text-slate-400 text-xs">Loading notifications...</div>
         ) : notifications.length === 0 ? (
-          <div className="card text-center py-12 text-slate-400 text-xs">No notifications found.</div>
+          <EmptyState
+            icon={<Bell className="w-6 h-6 text-slate-400" />}
+            title="All Caught Up"
+            description="You don't have any unread notifications or announcements right now."
+          />
         ) : (
           notifications.map((n) => (
-            <div
+            <Card
               key={n.id}
-              className={`card p-4 flex items-start justify-between gap-4 border transition-all ${
-                !n.is_read ? 'bg-sky-950/20 border-sky-500/40' : 'bg-slate-900/80 border-slate-800'
-              }`}
+              variant={!n.is_read ? 'ai' : 'default'}
+              className="p-4 flex items-start justify-between gap-4"
             >
               <div>
                 <div className="flex items-center gap-2">
-                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-sky-400" />}
-                  <h3 className="font-bold text-slate-100 text-sm">{n.title}</h3>
+                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />}
+                  <h3 className="font-bold text-slate-100 text-sm tracking-tight">{n.title}</h3>
                 </div>
                 <p className="text-xs text-slate-300 mt-1">{n.message}</p>
                 <div className="text-[10px] text-slate-400 mt-2 font-mono">
@@ -73,14 +79,16 @@ export const NotificationsPage: React.FC = () => {
               </div>
 
               {!n.is_read && (
-                <button
+                <Button
                   onClick={() => handleMarkRead(n.id)}
-                  className="btn-secondary text-xs shrink-0 py-1"
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Mark Read
-                </button>
+                  Mark Read
+                </Button>
               )}
-            </div>
+            </Card>
           ))
         )}
       </div>

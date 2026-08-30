@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { X, Clock, Plus, Edit2, Trash2, CheckCircle2, BookOpen, MapPin, Tag } from 'lucide-react';
+import { X, Clock, Plus, Edit2, Trash2, CheckCircle2 } from 'lucide-react';
 import { academicsApi } from '../../api/client';
 import { TimetableItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 
 interface ScheduleManagerModalProps {
   isOpen: boolean;
@@ -136,16 +138,16 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
+      <div className="bg-[#0d131f] border border-[#1b2538] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950">
+        <div className="flex items-center justify-between p-5 border-b border-[#1b2538] bg-[#080c14]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
-              <Clock className="w-5 h-5" />
+            <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              <Clock className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-100">Manage Upcoming Lecture Schedule</h2>
+              <h2 className="text-base font-bold text-slate-100 tracking-tight">Manage Lecture Schedule</h2>
               <p className="text-xs text-slate-400">Add, edit class timing, topics, and room assignments</p>
             </div>
           </div>
@@ -153,18 +155,18 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 overflow-y-auto space-y-6 flex-1">
+        <div className="p-5 overflow-y-auto space-y-5 flex-1">
           {/* Add / Edit Form */}
           {(editingSlot || isAddingNew) ? (
-            <form onSubmit={handleSaveSlot} className="card bg-slate-950 border-sky-500/30 p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <h3 className="text-xs font-bold text-sky-400 uppercase tracking-wider">
-                  {editingSlot ? `Editing Slot #${editingSlot.id}` : 'Add New Upcoming Class Slot'}
+            <form onSubmit={handleSaveSlot} className="p-4 rounded-xl bg-[#080c14] border border-sky-500/30 space-y-3.5">
+              <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
+                <h3 className="text-xs font-bold text-sky-400 uppercase tracking-wider font-mono">
+                  {editingSlot ? `Editing Slot #${editingSlot.id}` : 'Add New Class Slot'}
                 </h3>
                 <button
                   type="button"
@@ -215,7 +217,7 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
                   <label className="block text-slate-300 font-semibold mb-1">Topic</label>
                   <input
                     type="text"
-                    placeholder="e.g. Deep Neural Networks & Convolutions"
+                    placeholder="e.g. Deep Neural Networks"
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
                     className="input-field text-xs"
@@ -246,21 +248,24 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={resetForm}
-                  className="btn-secondary text-xs"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="sm"
                   disabled={loading}
-                  className="btn-primary text-xs"
+                  isLoading={loading}
+                  leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {loading ? 'Saving...' : editingSlot ? 'Update Class Slot' : 'Create Class Slot'}
-                </button>
+                  {editingSlot ? 'Update Slot' : 'Save Slot'}
+                </Button>
               </div>
             </form>
           ) : (
@@ -268,17 +273,19 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
               <span className="text-xs text-slate-400 font-semibold">
                 Scheduled Slots for Today ({(timetable || []).length})
               </span>
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={startAddNewSlot}
-                className="btn-primary text-xs"
+                leftIcon={<Plus className="w-4 h-4" />}
               >
-                <Plus className="w-4 h-4" /> Add Class Slot
-              </button>
+                Add Class Slot
+              </Button>
             </div>
           )}
 
           {/* List of Existing Slots */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {(!timetable || timetable.length === 0) ? (
               <div className="text-center py-8 text-slate-500 text-xs">
                 No upcoming lecture slots found. Click "Add Class Slot" above to schedule one.
@@ -287,44 +294,44 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
               (timetable || []).map((slot) => (
                 <div
                   key={slot.id}
-                  className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                  className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
                     editingSlot?.id === slot.id
                       ? 'bg-sky-500/10 border-sky-500/50'
-                      : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                      : 'bg-[#080c14] border-[#1b2538] hover:border-slate-700'
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0 mt-0.5">
+                    <div className="px-2.5 py-1.5 rounded-lg bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0 mt-0.5 border border-sky-500/20">
                       {slot.time}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                        <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                           {slot.subject_code}
                         </span>
-                        <span className="font-bold text-slate-100 text-sm">{slot.subject_name}</span>
+                        <span className="font-bold text-slate-100 text-xs sm:text-sm">{slot.subject_name}</span>
                       </div>
-                      <div className="text-xs text-slate-300 mt-1">
+                      <div className="text-xs text-slate-300 mt-0.5">
                         Topic: <span className="text-sky-300 font-medium">{slot.topic || 'General Lecture'}</span>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-3">
+                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-3">
                         <span>Sec: <strong className="text-slate-200">{slot.section}</strong></span>
                         <span>Room: <strong className="text-slate-200">{slot.classroom}</strong></span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-center">
+                  <div className="flex items-center gap-1.5 self-end sm:self-center">
                     <button
                       onClick={() => startEditSlot(slot)}
-                      className="p-2 rounded-lg bg-slate-800 text-sky-400 hover:bg-sky-500/20 transition-colors text-xs font-semibold flex items-center gap-1"
+                      className="p-1.5 rounded-lg bg-slate-800/80 text-sky-400 hover:bg-sky-500/20 transition-colors text-xs font-semibold flex items-center gap-1"
                       title="Edit Timing & Details"
                     >
-                      <Edit2 className="w-3.5 h-3.5" /> Edit
+                      <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDeleteSlot(slot.id)}
-                      className="p-2 rounded-lg bg-slate-800 text-rose-400 hover:bg-rose-500/20 transition-colors text-xs font-semibold flex items-center gap-1"
+                      className="p-1.5 rounded-lg bg-slate-800/80 text-rose-400 hover:bg-rose-500/20 transition-colors text-xs font-semibold flex items-center gap-1"
                       title="Remove Slot"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -337,10 +344,10 @@ export const ScheduleManagerModal: React.FC<ScheduleManagerModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
-          <button onClick={onClose} className="btn-secondary text-xs">
+        <div className="p-4 border-t border-[#1b2538] bg-[#080c14] flex justify-end">
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>

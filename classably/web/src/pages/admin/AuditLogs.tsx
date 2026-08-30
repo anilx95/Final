@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, RefreshCw, Filter, ShieldAlert } from 'lucide-react';
+import { FileText, RefreshCw, Filter } from 'lucide-react';
 import { adminApi } from '../../api/client';
 import { AuditLogItem } from '../../types';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 
 export const AuditLogs: React.FC = () => {
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
@@ -12,7 +15,7 @@ export const AuditLogs: React.FC = () => {
     setLoading(true);
     try {
       const res = await adminApi.getAuditLogs(100);
-      setLogs(res.data);
+      setLogs(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
     } finally {
@@ -32,44 +35,50 @@ export const AuditLogs: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-100 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-purple-400" /> Audit Logs & Security Trails
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
+            <FileText className="w-5 h-5 text-indigo-400" /> Audit Logs & Security Trails
           </h1>
-          <p className="text-xs text-slate-400">Immutable record of system authentications, OCR scans, voice triggers, and administrative actions</p>
+          <p className="text-xs text-slate-400 mt-1">Immutable record of system authentications, OCR scans, voice triggers, and administrative actions</p>
         </div>
 
-        <button onClick={fetchLogs} disabled={loading} className="btn-secondary text-xs">
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh Logs
-        </button>
+        <Button
+          onClick={fetchLogs}
+          disabled={loading}
+          variant="secondary"
+          size="sm"
+          leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />}
+        >
+          Refresh Logs
+        </Button>
       </div>
 
       {/* Filter Bar */}
-      <div className="card p-4 flex items-center gap-4">
+      <Card variant="default" className="p-4 flex flex-wrap items-center gap-3">
         <Filter className="w-4 h-4 text-slate-400" />
         <span className="text-xs text-slate-300 font-semibold">Filter Module:</span>
-        <div className="flex flex-wrap gap-1 text-xs">
+        <div className="flex flex-wrap gap-1.5 text-xs">
           {['all', 'auth', 'ocr', 'voice', 'devices', 'accessibility'].map((mod) => (
             <button
               key={mod}
               onClick={() => setFilterModule(mod)}
-              className={`px-3 py-1 rounded-md capitalize font-semibold transition-all ${
+              className={`px-3 py-1 rounded-lg capitalize font-semibold transition-all duration-150 ${
                 filterModule === mod
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-[#080c14] border border-[#1b2538] text-slate-400 hover:text-white'
               }`}
             >
               {mod}
             </button>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Audit Log Table */}
-      <div className="card p-0 overflow-hidden">
+      <Card variant="default" className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+              <tr className="bg-[#080c14] border-b border-[#1b2538] text-slate-400 font-semibold uppercase text-[10px] tracking-wider font-mono">
                 <th className="py-3.5 px-4">Log ID</th>
                 <th className="py-3.5 px-4">Action</th>
                 <th className="py-3.5 px-4">Module</th>
@@ -79,29 +88,28 @@ export const AuditLogs: React.FC = () => {
                 <th className="py-3.5 px-4">Timestamp</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+            <tbody className="divide-y divide-[#1b2538]/60 font-mono text-[11px]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-400 font-sans">
-                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <td colSpan={7} className="text-center py-12 text-slate-400 font-sans">
                     Querying audit trail database...
                   </td>
                 </tr>
               ) : filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-400 font-sans">
+                  <td colSpan={7} className="text-center py-12 text-slate-400 font-sans">
                     No logs found for this module.
                   </td>
                 </tr>
               ) : (
                 filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 text-purple-400 font-bold">#{log.id}</td>
+                  <tr key={log.id} className="hover:bg-[#121a2a] transition-colors">
+                    <td className="py-3 px-4 text-indigo-400 font-bold">#{log.id}</td>
                     <td className="py-3 px-4 font-sans font-semibold text-slate-200">{log.action}</td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 capitalize">
+                      <Badge variant="neutral" size="sm" className="capitalize">
                         {log.module}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="py-3 px-4 font-sans text-slate-300">
                       {log.user_id ? `User #${log.user_id}` : 'System'}
@@ -119,7 +127,7 @@ export const AuditLogs: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

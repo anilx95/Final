@@ -15,13 +15,11 @@ import {
   Sparkles,
   HelpCircle,
   FolderDown,
-  Volume2,
   Mic,
   Calendar,
   FileCheck,
   UserCheck,
   Building,
-  GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -76,22 +74,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       {/* Mobile backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed lg:sticky top-16 left-0 z-40 w-64 h-[calc(100vh-4rem)] bg-slate-900/95 border-r border-slate-800 transition-transform duration-300 flex flex-col justify-between ${
+        className={`fixed lg:sticky top-15 left-0 z-40 w-60 h-[calc(100vh-3.75rem)] bg-[#080c14] border-r border-[#151d2c] transition-transform duration-200 flex flex-col justify-between ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="p-4 space-y-6 overflow-y-auto">
+        <div className="p-3 space-y-4 overflow-y-auto">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 mb-2 font-mono">
               {role === 'admin' ? 'Administrative Suite' : role === 'teacher' ? 'Faculty Studio' : 'Student Portal'}
             </p>
-            <nav className="space-y-1">
+            <nav className="space-y-0.5">
               {items.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -101,15 +99,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     end={item.end}
                     onClick={onClose}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                      `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold tracking-tight transition-all duration-150 relative group ${
                         isActive
-                          ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20'
-                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/80'
+                          ? 'bg-[#1b2538] text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-[#0d131f]'
                       }`
                     }
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{item.label}</span>
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-sky-500" />
+                        )}
+                        <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-300'}`} />
+                        <span className="truncate">{item.label}</span>
+                      </>
+                    )}
                   </NavLink>
                 );
               })}
@@ -118,14 +123,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* User Info Footer Card */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/40 text-sky-300 flex items-center justify-center font-bold text-sm">
+        <div className="p-3 border-t border-[#151d2c] bg-[#06090f]/60">
+          <div className="flex items-center gap-2.5 p-1.5 rounded-lg bg-[#0d131f] border border-[#1b2538]">
+            <div className="w-7 h-7 rounded-md bg-sky-500/15 border border-sky-500/30 text-sky-300 flex items-center justify-center font-bold text-xs shrink-0">
               {user?.full_name?.charAt(0) || 'U'}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-xs font-bold text-slate-100 truncate">{user?.full_name}</div>
-              <div className="text-[10px] text-slate-400 capitalize">{role} Account</div>
+              <div className="text-[10px] text-slate-400 capitalize font-medium">{role}</div>
             </div>
           </div>
         </div>

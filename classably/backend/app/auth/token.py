@@ -6,8 +6,11 @@ from app.core.config import settings
 ALGORITHM = "HS256"
 
 
-def create_access_token(data: dict, expires_minutes: int = 30):
+def create_access_token(data: dict, expires_minutes: int = None):
     payload = data.copy()
+
+    if expires_minutes is None:
+        expires_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
     expire = datetime.utcnow() + timedelta(minutes=expires_minutes)
 

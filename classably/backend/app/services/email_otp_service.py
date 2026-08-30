@@ -33,7 +33,11 @@ class EmailOTPService:
         return f"{email.lower().strip()}:{purpose.lower().strip()}"
 
     def _hash_otp(self, otp: str, salt: str) -> str:
-        secret = (settings.SECRET_KEY or "classably_otp_secure_pepper_2026").encode("utf-8")
+        secret_key = settings.SECRET_KEY
+        if not secret_key or secret_key == "default-production-secret-key-classably-accessibility-2026":
+            logger.warning("[OTP Security] SECRET_KEY is missing or using default — OTP hashing uses fallback pepper")
+            secret_key = "classably_otp_secure_pepper_2026"
+        secret = secret_key.encode("utf-8")
         data = f"{salt}:{otp}".encode("utf-8")
         return hmac.new(secret, data, hashlib.sha256).hexdigest()
 
@@ -64,7 +68,7 @@ class EmailOTPService:
                 if elapsed < cooldown:
                     return False, int(cooldown - elapsed)
         except Exception as e:
-            logger.debug(f"DB rate-limit query notice: {e}")
+            logger.warning(f"[OTP] DB rate-limit check notice for {clean_email}: {e}")
         finally:
             if should_close_db:
                 db.close()
@@ -127,12 +131,13 @@ class EmailOTPService:
             db.add(otp_record)
             db.commit()
         except Exception as e:
-            logger.debug(f"DB OTP save notice: {e}")
+            logger.error(f"[OTP] Database error saving OTP for {clean_email}: {e}")
             db.rollback()
         finally:
             if should_close_db:
                 db.close()
 
+        logger.info(f"[OTP] Generated OTP for {clean_email} (purpose={clean_purpose}), expires in {settings.OTP_EXPIRE_MINUTES} min")
         return otp_code
 
     def verify_otp(self, email: str, otp_code: str, purpose: str, consume: bool = True, db: Optional[Session] = None) -> Tuple[bool, str]:
@@ -178,13 +183,15 @@ class EmailOTPService:
                         key = self._get_key(clean_email, clean_purpose)
                         self._otp_store.pop(key, None)
                     db.commit()
+                    logger.info(f"[OTP] Verification SUCCESS for {clean_email} (purpose={clean_purpose}, consumed={consume})")
                     return True, "Verification successful."
                 else:
                     db.commit()
+                    logger.info(f"[OTP] Verification FAILED for {clean_email} (purpose={clean_purpose}) — invalid code")
                     return False, "Invalid verification code. Please check your email."
 
         except Exception as e:
-            logger.debug(f"DB OTP verify notice: {e}")
+            logger.error(f"[OTP] Database error during verification for {clean_email}: {e}")
         finally:
             if should_close_db:
                 db.close()
@@ -215,14 +222,47 @@ class EmailOTPService:
 
         return False, "Invalid verification code. Please check your email."
 
+    def invalidate_failed_otp(self, email: str, purpose: str, db: Optional[Session] = None) -> None:
+        """Remove or invalidate an OTP that failed to dispatch so the user is not locked by cooldown."""
+        clean_email = email.lower().strip()
+        clean_purpose = purpose.lower().strip()
+
+        # Clear from in-memory cache
+        key = self._get_key(clean_email, clean_purpose)
+        self._otp_store.pop(key, None)
+
+        should_close_db = False
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+
+        try:
+            # Delete unconsumed OTP records for this email and purpose created within the last 2 minutes
+            recent_cutoff = datetime.utcnow() - timedelta(minutes=2)
+            db.query(EmailOTP).filter(
+                EmailOTP.email == clean_email,
+                EmailOTP.purpose == clean_purpose,
+                EmailOTP.is_consumed == False,
+                EmailOTP.created_at >= recent_cutoff,
+            ).delete(synchronize_session=False)
+            db.commit()
+            logger.info(f"[OTP] Cleaned up failed OTP dispatch for {clean_email} ({clean_purpose})")
+        except Exception as e:
+            logger.warning(f"[OTP] Notice during failed OTP cleanup for {clean_email}: {e}")
+            db.rollback()
+        finally:
+            if should_close_db:
+                db.close()
+
     def send_otp_email(self, to_email: str, otp_code: str, purpose: str = "Verification") -> bool:
         """Send the OTP via Gmail SMTP using SSL/TLS with configured App Password."""
-        smtp_user = settings.SMTP_USER
-        smtp_password = settings.SMTP_PASSWORD
-        smtp_host = settings.SMTP_HOST
-        smtp_port = settings.SMTP_PORT
-        from_name = settings.SMTP_FROM_NAME
-        from_email = settings.SMTP_FROM_EMAIL or smtp_user
+        clean_to_email = to_email.lower().strip()
+        smtp_user = (settings.SMTP_USER or "").strip()
+        smtp_password = (settings.SMTP_PASSWORD or "").strip().replace(" ", "").strip('"').strip("'")
+        smtp_host = (settings.SMTP_HOST or "smtp.gmail.com").strip()
+        smtp_port = int(settings.SMTP_PORT or 465)
+        from_name = (settings.SMTP_FROM_NAME or "ClassAbly").strip()
+        from_email = (settings.SMTP_FROM_EMAIL or smtp_user).strip()
 
         purpose_label = "Account Registration" if purpose == "register" else "Secure Account Login" if purpose == "login" else purpose.capitalize()
 
@@ -262,7 +302,7 @@ class EmailOTPService:
                 </div>
 
                 <p class="info">Hello,</p>
-                <p class="info">You requested a one-time verification code for <strong>{to_email}</strong> on ClassAbly. Use the code below to complete your {purpose_label.lower()}:</p>
+                <p class="info">You requested a one-time verification code for <strong>{clean_to_email}</strong> on ClassAbly. Use the code below to complete your {purpose_label.lower()}:</p>
 
                 <div class="otp-box">
                     <div class="otp-code">{otp_code}</div>
@@ -284,7 +324,7 @@ class EmailOTPService:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = f"{from_name} <{from_email}>"
-        msg["To"] = to_email
+        msg["To"] = clean_to_email
 
         # Plain text alternative
         plain_text = f"Your ClassAbly {purpose_label} code is: {otp_code}\nValid for {settings.OTP_EXPIRE_MINUTES} minutes.\nDo not share this code."
@@ -293,28 +333,37 @@ class EmailOTPService:
 
         # If credentials are not configured or mock mode is on
         if not smtp_user or not smtp_password or settings.MOCK_EMAIL_IN_DEV:
-            logger.info(f"[Mock Email Service] OTP for {to_email} ({purpose}): {otp_code}")
+            logger.info(f"[Mock Email Service] OTP for {clean_to_email} ({purpose}): {otp_code}")
             return True
 
-        # Send via Gmail SMTP
-        try:
-            cleaned_password = smtp_password.replace(" ", "")
-            if smtp_port == 465:
-                with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
-                    server.login(smtp_user, cleaned_password)
-                    server.send_message(msg)
-            else:
-                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                    server.starttls()
-                    server.login(smtp_user, cleaned_password)
-                    server.send_message(msg)
+        # Send via Gmail SMTP with retry for transient socket drops/timeouts
+        last_error = None
+        for attempt in range(2):
+            try:
+                if smtp_port == 465:
+                    with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
+                        server.login(smtp_user, smtp_password)
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                        server.ehlo()
+                        server.starttls()
+                        server.ehlo()
+                        server.login(smtp_user, smtp_password)
+                        server.send_message(msg)
 
-            logger.info(f"[Gmail SMTP] Successfully dispatched OTP to {to_email} for {purpose}")
-            return True
+                logger.info(f"[Gmail SMTP] Successfully dispatched OTP to {clean_to_email} for {purpose}")
+                return True
 
-        except Exception as e:
-            logger.error(f"[Gmail SMTP Error] Failed to send email to {to_email}: {e}")
-            return False
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[Gmail SMTP Attempt {attempt+1}/2] Failed to send email to {clean_to_email}: {e}")
+                if attempt == 0:
+                    time.sleep(1.5)
+
+        logger.error(f"[Gmail SMTP Error] All attempts failed to send email to {clean_to_email}: {last_error}")
+        return False
 
 
 email_otp_service = EmailOTPService()
+
