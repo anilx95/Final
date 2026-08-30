@@ -254,9 +254,71 @@ class EmailOTPService:
             if should_close_db:
                 db.close()
 
-    def send_otp_email(self, to_email: str, otp_code: str, purpose: str = "Verification") -> bool:
-        """Send the OTP via Gmail SMTP using SSL/TLS with configured App Password."""
-        clean_to_email = to_email.lower().strip()
+    def _send_via_resend(
+        self,
+        to_email: str,
+        otp_code: str,
+        purpose_label: str,
+        subject: str,
+        html_content: str,
+        plain_text: str,
+    ) -> bool:
+        """Dispatch OTP email using Resend HTTPS API."""
+        api_key = (settings.RESEND_API_KEY or "").strip()
+        if not api_key:
+            logger.error(f"[Resend Error] RESEND_API_KEY is not configured. Cannot dispatch OTP to {to_email}.")
+            return False
+
+        from_email = (settings.RESEND_FROM_EMAIL or "").strip()
+        if not from_email:
+            from_email = "onboarding@resend.dev"
+
+        from_name = (settings.RESEND_FROM_NAME or settings.SMTP_FROM_NAME or "ClassAbly").strip()
+        from_header = f"{from_name} <{from_email}>" if from_name else from_email
+
+        params = {
+            "from": from_header,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content,
+            "text": plain_text,
+        }
+
+        try:
+            import resend
+            resend.api_key = api_key
+            response = resend.Emails.send(params)
+
+            res_id = ""
+            if isinstance(response, dict):
+                res_id = response.get("id", "")
+                if "error" in response or "statusCode" in response:
+                    err_msg = response.get("message") or response.get("error") or "Unknown Resend API error"
+                    logger.error(f"[Resend] Failed to send OTP to {to_email}: {err_msg}")
+                    return False
+            elif hasattr(response, "id"):
+                res_id = str(getattr(response, "id", "") or "")
+
+            if res_id:
+                logger.info(f"[Resend] Successfully dispatched OTP to {to_email} (id: {res_id})")
+            else:
+                logger.info(f"[Resend] Successfully dispatched OTP to {to_email}")
+            return True
+
+        except Exception as e:
+            logger.error(f"[Resend] Failed to send OTP to {to_email}: {e}")
+            return False
+
+    def _send_via_smtp(
+        self,
+        to_email: str,
+        otp_code: str,
+        purpose: str,
+        subject: str,
+        html_content: str,
+        plain_text: str,
+    ) -> bool:
+        """Dispatch OTP email using Gmail SMTP with SSL/TLS and retry logic."""
         smtp_user = (settings.SMTP_USER or "").strip()
         smtp_password = (settings.SMTP_PASSWORD or "").strip().replace(" ", "").strip('"').strip("'")
         smtp_host = (settings.SMTP_HOST or "smtp.gmail.com").strip()
@@ -264,8 +326,61 @@ class EmailOTPService:
         from_name = (settings.SMTP_FROM_NAME or "ClassAbly").strip()
         from_email = (settings.SMTP_FROM_EMAIL or smtp_user).strip()
 
-        purpose_label = "Account Registration" if purpose == "register" else "Secure Account Login" if purpose == "login" else purpose.capitalize()
+        if not smtp_user or not smtp_password:
+            logger.error(f"[Gmail SMTP Error] SMTP credentials not configured (SMTP_USER/SMTP_PASSWORD missing). Cannot send email to {to_email}.")
+            return False
 
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+
+        last_error = None
+        for attempt in range(2):
+            try:
+                if smtp_port == 465:
+                    with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
+                        server.login(smtp_user, smtp_password)
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                        server.ehlo()
+                        server.starttls()
+                        server.ehlo()
+                        server.login(smtp_user, smtp_password)
+                        server.send_message(msg)
+
+                logger.info(f"[Gmail SMTP] Successfully dispatched OTP to {to_email} for {purpose}")
+                return True
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[Gmail SMTP Attempt {attempt+1}/2] Failed to send email to {to_email}: {e}")
+                if attempt == 0:
+                    time.sleep(1.5)
+
+        logger.error(f"[Gmail SMTP Error] All attempts failed to send email to {to_email}: {last_error}")
+        return False
+
+    def send_otp_email(self, to_email: str, otp_code: str, purpose: str = "Verification") -> bool:
+        """Send the OTP via configured provider (Resend HTTPS API or Gmail SMTP)."""
+        clean_to_email = to_email.lower().strip()
+        provider = (settings.EMAIL_PROVIDER or "smtp").lower().strip()
+        logger.info(f"[Email Service] Provider: {provider}")
+
+        # Explicit mock email mode (only when MOCK_EMAIL_IN_DEV is enabled for dev/testing)
+        if settings.MOCK_EMAIL_IN_DEV:
+            logger.info(f"[Mock Email Service] OTP for {clean_to_email} ({purpose}): {otp_code}")
+            return True
+
+        from_name = (
+            settings.RESEND_FROM_NAME if provider == "resend" else settings.SMTP_FROM_NAME
+        ) or "ClassAbly"
+        from_name = from_name.strip()
+
+        purpose_label = "Account Registration" if purpose == "register" else "Secure Account Login" if purpose == "login" else purpose.capitalize()
         subject = f"{otp_code} is your {from_name} Verification Code"
 
         html_content = f"""
@@ -321,48 +436,29 @@ class EmailOTPService:
         </html>
         """
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{from_name} <{from_email}>"
-        msg["To"] = clean_to_email
-
-        # Plain text alternative
         plain_text = f"Your ClassAbly {purpose_label} code is: {otp_code}\nValid for {settings.OTP_EXPIRE_MINUTES} minutes.\nDo not share this code."
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(html_content, "html"))
 
-        # If credentials are not configured or mock mode is on
-        if not smtp_user or not smtp_password or settings.MOCK_EMAIL_IN_DEV:
-            logger.info(f"[Mock Email Service] OTP for {clean_to_email} ({purpose}): {otp_code}")
-            return True
-
-        # Send via Gmail SMTP with retry for transient socket drops/timeouts
-        last_error = None
-        for attempt in range(2):
-            try:
-                if smtp_port == 465:
-                    with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
-                        server.login(smtp_user, smtp_password)
-                        server.send_message(msg)
-                else:
-                    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
-                        server.ehlo()
-                        server.starttls()
-                        server.ehlo()
-                        server.login(smtp_user, smtp_password)
-                        server.send_message(msg)
-
-                logger.info(f"[Gmail SMTP] Successfully dispatched OTP to {clean_to_email} for {purpose}")
-                return True
-
-            except Exception as e:
-                last_error = e
-                logger.warning(f"[Gmail SMTP Attempt {attempt+1}/2] Failed to send email to {clean_to_email}: {e}")
-                if attempt == 0:
-                    time.sleep(1.5)
-
-        logger.error(f"[Gmail SMTP Error] All attempts failed to send email to {clean_to_email}: {last_error}")
-        return False
+        if provider == "resend":
+            return self._send_via_resend(
+                to_email=clean_to_email,
+                otp_code=otp_code,
+                purpose_label=purpose_label,
+                subject=subject,
+                html_content=html_content,
+                plain_text=plain_text,
+            )
+        elif provider == "smtp":
+            return self._send_via_smtp(
+                to_email=clean_to_email,
+                otp_code=otp_code,
+                purpose=purpose,
+                subject=subject,
+                html_content=html_content,
+                plain_text=plain_text,
+            )
+        else:
+            logger.error(f"[Email Service] Unknown EMAIL_PROVIDER '{provider}'. Supported providers: 'smtp', 'resend'.")
+            return False
 
 
 email_otp_service = EmailOTPService()

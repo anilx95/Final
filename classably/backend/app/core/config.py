@@ -62,14 +62,24 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
 
     # --------------------------------------------------
-    # Email / Gmail SMTP & OTP
+    # Email Provider & OTP
     # --------------------------------------------------
+    EMAIL_PROVIDER: str = "smtp"  # "smtp" for local Gmail SMTP, "resend" for Railway production
+
+    # Resend HTTPS API (Production)
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = ""  # e.g., "onboarding@resend.dev" or custom verified domain
+    RESEND_FROM_NAME: str = "ClassAbly"
+
+    # Gmail / SMTP Settings (Local Development)
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "ClassAbly"
+
+    # OTP Settings
     OTP_EXPIRE_MINUTES: int = 5
     OTP_COOLDOWN_SECONDS: int = 60
     MOCK_EMAIL_IN_DEV: bool = False
