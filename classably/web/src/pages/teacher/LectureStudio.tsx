@@ -760,7 +760,12 @@ export const LectureStudio: React.FC = () => {
   };
 
   // Initialize WebRTC & Media Stream
-  const initWebRTC = (stream: MediaStream) => {
+  const initWebRTC = (stream?: MediaStream) => {
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      console.log('[Teacher] Signaling WebSocket already active or connecting');
+      return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/events/1`;
     console.log('[Teacher] Connecting signaling WebSocket:', wsUrl);
@@ -774,7 +779,7 @@ export const LectureStudio: React.FC = () => {
       ws.send(JSON.stringify({ type: 'teacher_online', classroom_id: 1, role: 'teacher', peer_id: 'teacher' }));
       console.log('[Teacher] teacher_online broadcast sent');
 
-      // Immediately flush any speech subtitles captured during session startup
+      // Immediately flush any speech subtitles captured during session startup/reconnection
       while (pendingSubtitlesQueueRef.current.length > 0) {
         const queuedPayload = pendingSubtitlesQueueRef.current.shift();
         try {
@@ -799,7 +804,10 @@ export const LectureStudio: React.FC = () => {
           }
           lastNegotiationTimeRef.current.set(peerId, now);
           console.log('[Teacher] Student joined room, creating new offer for peer:', peerId);
-          await createPeerConnectionForStudent(peerId, stream);
+          const activeStream = stream || localStreamRef.current;
+          if (activeStream) {
+            await createPeerConnectionForStudent(peerId, activeStream);
+          }
         } else if (message.type === 'answer' && message.sdp) {
           console.log('[Teacher] answer received');
           const pc = peerConnectionsRef.current.get(peerId);
@@ -1198,8 +1206,29 @@ export const LectureStudio: React.FC = () => {
           setTeacherSpeechLang(restoredLang);
           prevTeacherSpeechLangRef.current = restoredLang;
 
-          await startMediaDevices(sess.id);
+          // 1. Immediately reconnect WebSocket and start speech recognition with 0ms delay
+          initWebRTC();
           startSpeechRecognition(sess.id, restoredLang);
+
+          // 2. Fetch existing session subtitles to restore live transcript state immediately
+          lectureApi.getSubtitles(sess.id).then((subRes) => {
+            if (isMounted && Array.isArray(subRes.data)) {
+              setSubtitles(subRes.data.map((s: any) => ({
+                id: s.id,
+                speaker: s.speaker_name || s.speaker || user?.full_name || 'Educator',
+                text: s.original_text || s.text || '',
+                original_text: s.original_text || s.text || '',
+                translations: s.translations || {},
+                timestamp: s.created_at ? new Date(s.created_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
+              })));
+            }
+          }).catch(() => {});
+
+          // 3. Start media hardware in parallel without blocking subtitle stream
+          startMediaDevices(sess.id).catch((err) => {
+            console.warn('[Teacher] Resumed session media start warning:', err);
+          });
+
           addToast({
             type: 'info',
             title: 'Resumed Active Lecture',

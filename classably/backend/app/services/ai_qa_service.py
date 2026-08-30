@@ -538,46 +538,67 @@ INSTRUCTIONS:
         self, transcript: str, subject: str, topic: str, duration: int = 0
     ) -> dict:
         """Synthesizes an accurate summary based strictly on the actual sentences in the transcript."""
-        raw_sentences = [s.strip() for s in re.split(r"[.\n]+", transcript) if len(s.strip()) > 8]
+        clean_text = transcript.strip()
+        raw_sentences = [
+            s.strip()
+            for s in re.split(r"[.\n;]+", clean_text)
+            if len(s.strip()) > 8 and not re.match(r"^\[\d+:\d+\]", s.strip())
+        ]
 
         if not raw_sentences:
             return {
-                "summary_text": "No spoken lecture transcript was recorded for this session. An AI summary cannot be generated without lecture speech data.",
+                "summary_text": f"No spoken lecture transcript was recorded for {subject} ({topic}). An AI summary cannot be generated without lecture speech data.",
                 "key_points": ["No lecture speech transcript available for this session."],
                 "definitions": [],
                 "formulas": [],
             }
 
-        # Build accurate summary from actual transcript sentences
-        intro = f"This lecture on {subject} ({topic}) focused on the concepts and problems presented by the educator."
-        topics_str = "Key points discussed: " + "; ".join(raw_sentences[:min(4, len(raw_sentences))]) + "."
-        teacher_explanations = "Detailed explanations covered: " + " ".join(raw_sentences[min(4, len(raw_sentences)):min(9, len(raw_sentences))]) if len(raw_sentences) > 4 else ""
+        # Build accurate executive summary from actual transcript sentences
+        intro = f"In this lecture on {subject} ({topic}), the educator delivered detailed instruction on the core concepts and principles of the subject."
+        key_topics = "Key points discussed by the educator: " + "; ".join(raw_sentences[:min(4, len(raw_sentences))]) + "."
         
-        summary_text = f"{intro}\n\n{topics_str}"
+        detail_sentences = raw_sentences[min(4, len(raw_sentences)):min(10, len(raw_sentences))]
+        teacher_explanations = ("Further explanations covered: " + " ".join(detail_sentences) + ".") if detail_sentences else ""
+
+        summary_text = f"{intro}\n\n{key_topics}"
         if teacher_explanations:
             summary_text += f"\n\n{teacher_explanations}"
 
+        # Extract real key takeaways from transcript sentences
         key_points = [
-            f"Lecture Topic: {topic} ({subject}).",
-            *[s if len(s) < 130 else s[:127] + "..." for s in raw_sentences[:min(4, len(raw_sentences))]],
-            f"Core Takeaway: Systematic understanding of {topic} principles and problem applications."
+            f"Lecture Focus: Comprehensive coverage of {topic} ({subject}).",
+            *[s if len(s) < 130 else s[:127] + "..." for s in raw_sentences[:min(6, len(raw_sentences))]],
+            f"Core Takeaway: Systematic understanding and practical problem-solving methods in {topic}."
         ]
 
-        definitions = [
-            f"{topic}: The primary subject matter taught and analyzed during this lecture session.",
-            f"{subject}: The academic domain providing analytical foundations for this class."
-        ]
+        # Extract real definitions discussed in class
+        definitions = []
+        for s in raw_sentences:
+            s_low = s.lower()
+            if any(k in s_low for k in [" is defined as ", " means ", " is called ", " refers to ", " is a ", " are defined as "]):
+                definitions.append(s if len(s) < 140 else s[:137] + "...")
+                if len(definitions) >= 4:
+                    break
 
+        if not definitions:
+            definitions = [
+                f"{topic}: The core domain and analytical principles explored during this lecture.",
+                f"{subject}: The overarching discipline providing foundational frameworks for this class."
+            ]
+
+        # Extract formulas mentioned or standard to the topic
         formulas = []
         lower_trans = transcript.lower()
-        if "quadratic" in lower_trans:
+        if "quadratic" in lower_trans or "ax^2" in lower_trans:
             formulas.append("x = (-b ± √(b² - 4ac)) / (2a)")
-        if "pythagor" in lower_trans:
+        if "pythagor" in lower_trans or "a^2 + b^2" in lower_trans:
             formulas.append("a² + b² = c²")
         if "derivative" in lower_trans or "calculus" in lower_trans:
-            formulas.append("d/dx(xⁿ) = n·xⁿ⁻¹")
-        if "newton" in lower_trans or "force" in lower_trans:
+            formulas.append("d/dx(xⁿ) = n · xⁿ⁻¹")
+        if "newton" in lower_trans or ("force" in lower_trans and "mass" in lower_trans):
             formulas.append("F = m · a")
+        if "gradient" in lower_trans or "learning rate" in lower_trans or "backpropagation" in lower_trans:
+            formulas.append("W_new = W_old - η · ∇L(W)")
 
         return {
             "summary_text": summary_text,

@@ -12,27 +12,89 @@ from app.models.entities.user import User
 from app.models.entities.lecture import LectureSession, LectureNote, LiveSubtitle, LectureRecording
 from app.services.export_service import export_service
 
+import re
+import urllib.parse
+from app.models.entities.ai_qa import AILectureSummary
+
 router = APIRouter(prefix="/api/export", tags=["Export & Downloads"])
 
 
 def _get_summary_source(session_id: int, db: Session):
-    note = db.query(LectureNote).filter(LectureNote.session_id == session_id).first()
     session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
-    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
+    ai_summary = db.query(AILectureSummary).filter(AILectureSummary.session_id == session_id).first()
+    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.id.asc()).all()
 
-    subject_title = f"{session.subject} - {session.topic}" if session and session.subject else f"Lecture {session_id}"
+    subject = session.subject if session and session.subject else "General Lecture"
+    topic = getattr(session, "topic", "Lecture") or "Lecture"
+    subject_title = f"{subject} — {topic}"
 
+    # 1. Primary Source: AILectureSummary (from AI Summary generation)
+    if ai_summary and ai_summary.summary_text and len(ai_summary.summary_text.strip()) > 0:
+        return SimpleNamespace(
+            title=f"{subject_title} — AI Summary",
+            summary=ai_summary.summary_text.strip(),
+            key_points=ai_summary.key_points if isinstance(ai_summary.key_points, list) else [],
+            definitions=ai_summary.definitions if isinstance(ai_summary.definitions, list) else [],
+            formulas=ai_summary.formulas if isinstance(ai_summary.formulas, list) else [],
+        )
+
+    # 2. Secondary Source: Live subtitles (generate accurate AI summary strictly from this exact lecture's transcript)
+    transcript_parts = []
+    for s in subtitles:
+        t = (getattr(s, "original_text", "") or getattr(s, "text", "") or getattr(s, "translated_text", "") or "").strip()
+        if t:
+            transcript_parts.append(t)
+    transcript = " ".join(transcript_parts)
+
+    if transcript.strip():
+        from app.services.ai_qa_service import ai_qa_service
+        res = ai_qa_service.summarize_lecture(
+            transcript=transcript,
+            subject=subject,
+            topic=topic,
+        )
+        try:
+            new_summary = AILectureSummary(
+                session_id=session_id,
+                summary_text=res["summary_text"],
+                key_points=res.get("key_points", []),
+                definitions=res.get("definitions", []),
+                formulas=res.get("formulas", []),
+                style="detailed",
+            )
+            db.add(new_summary)
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        return SimpleNamespace(
+            title=f"{subject_title} — AI Summary",
+            summary=res["summary_text"],
+            key_points=res.get("key_points", []),
+            definitions=res.get("definitions", []),
+            formulas=res.get("formulas", []),
+        )
+
+    # 3. Tertiary Source: LectureNote strictly for this session if available
+    note = db.query(LectureNote).filter(LectureNote.session_id == session_id).first()
     if note and note.summary and len(note.summary.strip()) > 0:
-        return note
+        return SimpleNamespace(
+            title=note.title or f"{subject_title} — Lecture Notes",
+            summary=note.summary.strip(),
+            key_points=note.key_points if isinstance(note.key_points, list) else [],
+            definitions=getattr(note, "definitions", []) if isinstance(getattr(note, "definitions", []), list) else [],
+            formulas=getattr(note, "formulas", []) if isinstance(getattr(note, "formulas", []), list) else [],
+        )
 
-    transcript = " ".join([s.original_text or s.text for s in subtitles if (s.original_text or s.text)]) if subtitles else ""
-    title = f"{subject_title} Summary"
-    summary = transcript if transcript else f"Lecture summary for {subject_title}. Session #{session_id} completed successfully."
-    key_points = [s.original_text or s.text for s in subtitles[:5]] if subtitles else ["Interactive live lecture session completed.", "Live transcription and student assistance active."]
+    # 4. Fallback if no audio/speech transcript was recorded
     return SimpleNamespace(
-        title=title,
-        summary=summary,
-        key_points=key_points,
+        title=f"{subject_title} — Summary",
+        summary=f"No spoken lecture transcript was recorded for Session #{session_id} ({subject_title}). Live session completed.",
+        key_points=[
+            f"Classroom Session #{session_id} ended.",
+            "No spoken transcript or live audio was captured during this session.",
+        ],
+        definitions=[],
         formulas=[],
     )
 
@@ -42,25 +104,56 @@ def download_transcript_txt(session_id: int, db: Session = Depends(get_db)):
     """Download text transcript of lecture. Accessible to both teachers and students."""
     session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
     note = db.query(LectureNote).filter(LectureNote.session_id == session_id).first()
-    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
+    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.id.asc()).all()
 
-    subject_title = f"{session.subject} - {session.topic}" if session and session.subject else f"Lecture {session_id}"
+    subject = session.subject if session and session.subject else "General Lecture"
+    topic = getattr(session, "topic", "Lecture") or "Lecture"
+    subject_title = f"{subject} - {topic}"
     title = note.title if note and note.title else f"{subject_title} Transcript"
 
     if note and note.raw_transcript and len(note.raw_transcript.strip()) > 0:
-        content = note.raw_transcript
+        content = note.raw_transcript.strip()
     elif subtitles:
-        content = "\n".join([f"[{s.created_at.strftime('%H:%M:%S') if s.created_at else '00:00:00'}] {s.speaker_name or 'Teacher'}: {s.original_text or s.text}" for s in subtitles])
-    else:
-        content = f"Transcript for {subject_title}\n\nSession ID: {session_id}\nDate: {datetime.utcnow().strftime('%Y-%m-%d')}\nStatus: Completed\nLive audio transcription recorded for this session."
+        lines = []
+        for s in subtitles:
+            speaker = getattr(s, "speaker_name", None) or "Teacher"
+            text = (getattr(s, "original_text", "") or getattr(s, "text", "") or getattr(s, "translated_text", "") or "").strip()
+            if not text:
+                continue
 
-    txt_data = export_service.generate_txt(title, content)
-    safe_title = title.replace(' ', '_').replace('/', '_').replace('\\', '_')
+            if getattr(s, "timestamp_offset", None) is not None and s.timestamp_offset > 0:
+                mins = int(s.timestamp_offset // 60)
+                secs = int(s.timestamp_offset % 60)
+                ts_str = f"{mins:02d}:{secs:02d}"
+            elif getattr(s, "created_at", None):
+                ts_str = s.created_at.strftime("%H:%M:%S")
+            else:
+                ts_str = "00:00"
+            lines.append(f"[{ts_str}] {speaker}: {text}")
+        content = "\n".join(lines) if lines else f"No spoken text recorded for Session #{session_id}."
+    else:
+        date_str = session.started_at.strftime('%Y-%m-%d %H:%M') if session and getattr(session, 'started_at', None) else datetime.utcnow().strftime('%Y-%m-%d')
+        content = f"No spoken audio transcript was recorded for Session #{session_id}.\nSubject: {subject}\nTopic: {topic}\nDate: {date_str}\nStatus: Completed"
+
+    metadata = {
+        "Subject": subject,
+        "Topic": topic,
+        "Session ID": str(session_id),
+        "Date": session.started_at.strftime("%Y-%m-%d %H:%M UTC") if session and getattr(session, "started_at", None) else datetime.utcnow().strftime("%Y-%m-%d"),
+        "Status": getattr(session, "status", "Completed") if session else "Completed",
+        "Total Subtitle Entries": str(len(subtitles)),
+    }
+
+    txt_data = export_service.generate_txt(title, content, metadata)
+
+    ascii_clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', f"{subject}_{topic}_Transcript").strip('_') or f"Lecture_{session_id}_Transcript"
+    utf8_encoded = urllib.parse.quote(f"{subject_title}_Transcript.txt")
+
     return Response(
-        content=txt_data,
+        content=txt_data.encode("utf-8"),
         media_type="text/plain; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_title}_Transcript.txt"',
+            "Content-Disposition": f'attachment; filename="{ascii_clean}.txt"; filename*=UTF-8\'\'{utf8_encoded}',
             "Access-Control-Expose-Headers": "Content-Disposition",
         }
     )
@@ -69,15 +162,28 @@ def download_transcript_txt(session_id: int, db: Session = Depends(get_db)):
 @router.get("/subtitles/{session_id}/vtt")
 def download_subtitles_vtt(session_id: int, db: Session = Depends(get_db)):
     """Download VTT subtitles of lecture. Accessible to both teachers and students."""
-    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.created_at.asc()).all()
-    sub_list = [{"speaker": s.speaker_name, "text": s.original_text, "timestamp_offset": s.timestamp_offset} for s in subtitles]
+    session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
+    subtitles = db.query(LiveSubtitle).filter(LiveSubtitle.session_id == session_id).order_by(LiveSubtitle.id.asc()).all()
+    sub_list = [
+        {
+            "speaker": getattr(s, "speaker_name", "Teacher"),
+            "text": getattr(s, "original_text", "") or getattr(s, "text", "") or getattr(s, "translated_text", ""),
+            "timestamp_offset": getattr(s, "timestamp_offset", 0.0),
+        }
+        for s in subtitles
+    ]
 
     vtt_data = export_service.generate_vtt(sub_list)
+    subject = session.subject if session and session.subject else "Lecture"
+    topic = getattr(session, "topic", "Subtitles") or "Subtitles"
+    ascii_clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', f"{subject}_{topic}_Subtitles").strip('_') or f"Lecture_{session_id}_Subtitles"
+    utf8_encoded = urllib.parse.quote(f"{subject}_{topic}_Subtitles.vtt")
+
     return Response(
-        content=vtt_data,
+        content=vtt_data.encode("utf-8"),
         media_type="text/vtt; charset=utf-8",
         headers={
-            "Content-Disposition": f"attachment; filename=Lecture_{session_id}_Subtitles.vtt",
+            "Content-Disposition": f'attachment; filename="{ascii_clean}.vtt"; filename*=UTF-8\'\'{utf8_encoded}',
             "Access-Control-Expose-Headers": "Content-Disposition",
         }
     )
@@ -89,25 +195,36 @@ def download_summary_pdf(session_id: int, db: Session = Depends(get_db)):
     session = db.query(LectureSession).filter(LectureSession.id == session_id).first()
     source = _get_summary_source(session_id, db)
 
+    subject = getattr(session, "subject", "General Lecture") if session else "General Lecture"
+    topic = getattr(session, "topic", "Lecture Topic") if session else "Lecture Topic"
+    teacher_name = getattr(getattr(session, "teacher", None), "user", None)
+    teacher_str = getattr(teacher_name, "name", "Faculty Educator") if teacher_name else "Faculty Educator"
+
     metadata = {
-        "Subject": getattr(session, "subject", "General Lecture") if session else "General Lecture",
-        "Topic": getattr(session, "topic", "Lecture Topic") if session else "Lecture Topic",
+        "Subject": subject,
+        "Topic": topic,
+        "Educator": teacher_str,
+        "Session ID": f"#{session_id}",
         "Date": session.started_at.strftime("%Y-%m-%d %H:%M") if session and getattr(session, "started_at", None) else datetime.utcnow().strftime("%Y-%m-%d"),
     }
 
     pdf_bytes = export_service.generate_pdf_summary(
         title=source.title,
         summary=source.summary,
-        key_points=source.key_points or [],
+        key_points=getattr(source, "key_points", []) or [],
+        definitions=getattr(source, "definitions", []) or [],
         formulas=getattr(source, "formulas", []) or [],
         metadata=metadata,
     )
-    safe_title = source.title.replace(' ', '_').replace('/', '_').replace('\\', '_')
+
+    ascii_clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', f"{subject}_{topic}_Summary").strip('_') or f"Lecture_{session_id}_Summary"
+    utf8_encoded = urllib.parse.quote(f"{subject}_{topic}_Summary.pdf")
+
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_title}_Summary.pdf"',
+            "Content-Disposition": f'attachment; filename="{ascii_clean}.pdf"; filename*=UTF-8\'\'{utf8_encoded}',
             "Access-Control-Expose-Headers": "Content-Disposition",
         }
     )
