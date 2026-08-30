@@ -66,30 +66,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   };
 
   return (
-    <header className="h-15 bg-[#080c14]/95 border-b border-[#151d2c] backdrop-blur-xl sticky top-0 z-40 px-4 sm:px-6 flex items-center justify-between">
-      <div className="flex items-center gap-3">
+    <header className="h-15 bg-[#080c14]/95 border-b border-[#151d2c] backdrop-blur-xl sticky top-0 z-40 px-3 sm:px-6 flex items-center justify-between">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           onClick={onToggleSidebar}
-          className="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg lg:hidden hover:bg-slate-800/80 transition-colors"
+          className="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg lg:hidden hover:bg-slate-800/80 transition-colors shrink-0"
           aria-label="Toggle Navigation Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+        <Link to="/" className="flex items-center gap-2 group min-w-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-sm group-hover:scale-105 transition-transform shrink-0">
             C
           </div>
-          <div>
-            <div className="font-bold text-sm text-slate-100 tracking-tight leading-none flex items-center gap-1.5">
-              ClassAbly <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-400 border border-sky-500/20">AI</span>
+          <div className="min-w-0">
+            <div className="font-bold text-xs sm:text-sm text-slate-100 tracking-tight leading-none flex items-center gap-1">
+              ClassAbly <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-1 py-0.2 rounded bg-sky-500/15 text-sky-400 border border-sky-500/20">AI</span>
             </div>
-            <p className="text-[10px] text-slate-400 tracking-tight font-medium mt-0.5">Smart Classroom Accessibility</p>
+            <p className="text-[10px] text-slate-400 tracking-tight font-medium mt-0.5 hidden sm:block truncate">Smart Classroom Accessibility</p>
           </div>
         </Link>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
         {/* Offline sync status */}
         <div className="hidden lg:flex items-center">
           <Badge variant="neutral" size="sm">
@@ -120,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-4 z-50 animate-fade-in">
+            <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-4 z-50 animate-fade-in">
               <div className="flex items-center justify-between pb-3 border-b border-[#1b2538]">
                 <h4 className="font-bold text-xs text-slate-100">Notifications</h4>
                 <Link to="/notifications" onClick={() => setShowNotifications(false)} className="text-[11px] text-sky-400 hover:underline">

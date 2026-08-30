@@ -26,13 +26,15 @@ api.interceptors.request.use(
 export const authApi = {
   login: (data: any) => api.post('/api/auth/login', data),
   register: (data: any) => api.post('/api/auth/register', data),
-  sendOtp: (email: string, purpose: 'register' | 'login' = 'register') =>
+  sendOtp: (email: string, purpose: 'register' | 'login' | 'reset_password' = 'register') =>
     api.post('/api/auth/otp/send', { email, purpose }),
-  verifyOtp: (email: string, otp: string, purpose: 'register' | 'login' = 'register') =>
+  verifyOtp: (email: string, otp: string, purpose: 'register' | 'login' | 'reset_password' = 'register') =>
     api.post('/api/auth/otp/verify', { email, otp, purpose }),
   registerWithOtp: (data: any) => api.post('/api/auth/register-with-otp', data),
   loginWithOtp: (email: string, otp: string) =>
     api.post('/api/auth/login-with-otp', { email, otp }),
+  resetPasswordWithOtp: (data: { email: string; otp: string; new_password: string; confirm_password?: string }) =>
+    api.post('/api/auth/reset-password-with-otp', data),
   getMe: () => api.get('/api/auth/me'),
   updateProfile: (data: any) => api.put('/api/auth/profile', data),
   forgotPassword: (data: any) => api.post('/api/auth/forgot-password', data),

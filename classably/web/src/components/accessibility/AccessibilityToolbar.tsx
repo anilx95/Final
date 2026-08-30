@@ -54,7 +54,7 @@ export const AccessibilityToolbar: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-4 z-50 animate-fade-in">
+        <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-3.5 sm:p-4 z-50 animate-fade-in">
           <div className="flex items-center justify-between pb-3 border-b border-[#1b2538]">
             <h3 className="font-bold text-slate-100 text-xs flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-sky-400" /> Adaptive Accessibility Settings

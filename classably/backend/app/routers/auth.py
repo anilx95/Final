@@ -19,6 +19,7 @@ from app.schemas.auth import (
     SendOTPRequest,
     VerifyOTPRequest,
     OTPLoginRequest,
+    ResetPasswordWithOTPRequest,
     TokenResponse,
     UserOut,
     PasswordResetRequest,
@@ -36,7 +37,7 @@ def send_otp(
     payload: SendOTPRequest,
     db: Session = Depends(get_db),
 ):
-    """Generate and dispatch Gmail OTP for Registration or Login."""
+    """Generate and dispatch Gmail OTP for Registration, Login, or Password Reset."""
     email_clean = payload.email.lower().strip()
     if "@" not in email_clean:
         raise HTTPException(
@@ -45,7 +46,7 @@ def send_otp(
         )
 
     purpose = payload.purpose.lower().strip()
-    if purpose not in ["register", "login"]:
+    if purpose not in ["register", "login", "reset_password", "forgot_password"]:
         purpose = "register"
 
     # For registration: verify email is not already taken
@@ -62,6 +63,19 @@ def send_otp(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No account found with this email address. Please register first.",
+            )
+        if not existing.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is disabled. Please contact administrator.",
+            )
+
+    # For password reset: verify user exists and is active
+    if purpose in ["reset_password", "forgot_password"]:
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No account found with this email address. Please check your email or register first.",
             )
         if not existing.is_active:
             raise HTTPException(
@@ -463,6 +477,94 @@ def forgot_password(
         }
     return {
         "message": "If an account exists with that email, a reset link has been generated."
+    }
+
+
+@router.post("/reset-password-with-otp")
+def reset_password_with_otp(
+    http_request: Request,
+    payload: ResetPasswordWithOTPRequest,
+    db: Session = Depends(get_db),
+):
+    """Verify OTP and update user account password securely."""
+    email_clean = payload.email.lower().strip()
+    if "@" not in email_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a valid email address.",
+        )
+
+    # 0. Validate OTP format (must be 6 digits)
+    otp_clean = payload.otp.strip()
+    if not otp_clean or len(otp_clean) != 6 or not otp_clean.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP must be exactly 6 digits.",
+        )
+
+    # 1. Validate password constraints
+    new_password_clean = payload.new_password
+    if not new_password_clean or len(new_password_clean) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters.",
+        )
+
+    if payload.confirm_password is not None and payload.confirm_password != new_password_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirm password do not match.",
+        )
+
+    # 2. Strictly verify and consume OTP for reset_password purpose
+    is_valid, err_msg = email_otp_service.verify_otp(
+        email=email_clean,
+        otp_code=otp_clean,
+        purpose="reset_password",
+        consume=True,
+        db=db,
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=err_msg,
+        )
+
+    # 3. Locate user
+    user = get_user_by_email(db, email_clean)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email address.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is disabled. Please contact administrator.",
+        )
+
+    # 4. Hash and update password securely
+    user.password_hash = hash_password(new_password_clean)
+    user.reset_token = None
+    db.commit()
+
+    try:
+        AuditLogger.log(
+            db=db,
+            user_id=user.id,
+            action=AuditAction.USER_UPDATED,
+            module="auth",
+            ip_address=http_request.client.host if http_request.client else None,
+            user_agent=http_request.headers.get("user-agent"),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {
+        "success": True,
+        "message": "Password has been reset successfully. Please sign in with your new password.",
     }
 
 

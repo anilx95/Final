@@ -1747,14 +1747,14 @@ export const LectureStudio: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <Card variant="default" padding="none" className="overflow-hidden relative group bg-black">
             {/* Camera Controls Overlay Header */}
-            <div className="absolute top-3.5 left-3.5 right-3.5 z-20 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-2 pointer-events-auto bg-[#0d131f]/90 backdrop-blur-md px-2.5 py-1 rounded-lg border border-[#1b2538] text-xs">
-                <Camera className="w-3.5 h-3.5 text-sky-400" />
-                <span className="font-semibold text-slate-200 text-[11px]">Camera:</span>
+            <div className="absolute top-2 sm:top-3.5 left-2 sm:left-3.5 right-2 sm:right-3.5 z-20 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
+              <div className="flex items-center gap-1.5 pointer-events-auto bg-[#0d131f]/90 backdrop-blur-md px-2 py-1 rounded-lg border border-[#1b2538] text-xs">
+                <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span className="font-semibold text-slate-200 text-[10px] sm:text-[11px] hidden xs:inline">Camera:</span>
                 <select
                   value={cameraSourceType}
                   onChange={(e) => setCameraSourceType(e.target.value as any)}
-                  className="bg-transparent text-sky-300 font-bold focus:outline-none cursor-pointer text-[11px]"
+                  className="bg-transparent text-sky-300 font-bold focus:outline-none cursor-pointer text-[10px] sm:text-[11px]"
                 >
                   <option value="webcam" className="bg-[#0d131f] text-slate-100">Laptop Webcam</option>
                   <option value="esp32" className="bg-[#0d131f] text-slate-100">ESP32 Cam Stream</option>
@@ -1762,12 +1762,12 @@ export const LectureStudio: React.FC = () => {
                 </select>
               </div>
 
-              <div className="pointer-events-auto flex items-center gap-2">
+              <div className="pointer-events-auto flex items-center gap-1.5">
                 {/* YouTube Style CC Button */}
                 <button
                   type="button"
                   onClick={() => setIsCcEnabled(!isCcEnabled)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1 ${
+                  className={`px-2 sm:px-2.5 py-1 rounded-md text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1 ${
                     isCcEnabled
                       ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-md shadow-yellow-500/10 hover:bg-yellow-500/30'
                       : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
@@ -1778,15 +1778,15 @@ export const LectureStudio: React.FC = () => {
                   <span className="text-[9px] uppercase font-bold">{isCcEnabled ? 'ON' : 'OFF'}</span>
                 </button>
 
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-md backdrop-blur-md ${cameraActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
-                  {cameraActive ? 'CAMERA ON' : 'CAMERA OFF'}
+                <span className={`text-[10px] font-bold px-1.5 sm:px-2 py-1 rounded-md backdrop-blur-md ${cameraActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
+                  {cameraActive ? 'ON' : 'OFF'}
                 </span>
 
                 <button
                   type="button"
                   onClick={toggleMic}
                   disabled={!isSessionActive}
-                  className={`flex items-center gap-1.5 backdrop-blur-md px-2.5 py-1 rounded-md border transition-all cursor-pointer ${
+                  className={`flex items-center gap-1 backdrop-blur-md px-2 py-1 rounded-md border transition-all cursor-pointer ${
                     micActive
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
                       : 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
@@ -1794,21 +1794,21 @@ export const LectureStudio: React.FC = () => {
                   title={micActive ? 'Click to Mute Microphone' : 'Click to Unmute Microphone'}
                 >
                   <Mic className={`w-3.5 h-3.5 ${micActive ? 'text-emerald-400 animate-pulse' : 'text-rose-400'}`} />
-                  <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                  <div className="w-8 sm:w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
                     <div
                       className={`h-full transition-all duration-75 ease-out ${micActive ? 'bg-emerald-400' : 'bg-rose-500'}`}
                       style={{ width: `${micActive ? micLevel : 0}%` }}
                     />
                   </div>
-                  <span className="text-[10px] font-mono text-slate-300 w-8 text-right">
-                    {micActive ? `${micLevel}%` : 'MUTED'}
+                  <span className="text-[10px] font-mono text-slate-300 w-7 sm:w-8 text-right">
+                    {micActive ? `${micLevel}%` : 'MUTE'}
                   </span>
                 </button>
               </div>
             </div>
 
             {/* Video Viewport */}
-            <div className="h-80 sm:h-96 w-full relative flex items-center justify-center bg-black">
+            <div className="h-64 sm:h-80 md:h-96 w-full relative flex items-center justify-center bg-black">
               <video
                 ref={videoRef}
                 autoPlay
@@ -1819,8 +1819,8 @@ export const LectureStudio: React.FC = () => {
 
               {/* CC Subtitle Overlay */}
               {isSessionActive && isCcEnabled && activeSubtitleText && (
-                <div className="absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none flex flex-col items-center gap-1 animate-fade-in">
-                  <div className="bg-black/85 backdrop-blur-sm px-4.5 py-2 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2.5 transition-all duration-150">
+                <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[92%] sm:max-w-[85%] w-auto pointer-events-none flex flex-col items-center gap-1 animate-fade-in">
+                  <div className="bg-black/90 backdrop-blur-md px-3 sm:px-4.5 py-1.5 sm:py-2 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2 transition-all duration-150">
                     <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
                       CC • {getLanguageByCode(targetLang)?.name?.toUpperCase() || targetLang.toUpperCase()}
                     </span>

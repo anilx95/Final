@@ -152,7 +152,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-3 sm:p-4 relative overflow-hidden">
       {/* Dynamic Background Glow */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none animate-pulse-slow"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -166,7 +166,7 @@ export const Login: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1">Smart Classroom Accessibility Platform</p>
         </div>
 
-        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-4 sm:p-8 shadow-2xl">
           {/* Dual Authentication Mode Selector */}
           <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#080c14] border border-[#1b2538] rounded-xl mb-6">
             <button

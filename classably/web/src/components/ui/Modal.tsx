@@ -50,7 +50,7 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 animate-fade-in">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/75 backdrop-blur-md transition-opacity"
@@ -60,7 +60,7 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Card */}
       <div
-        className={`relative w-full ${maxWidthClasses[chosenSize]} bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-6 overflow-hidden z-10 animate-slide-up max-h-[90vh] flex flex-col ${className}`}
+        className={`relative w-full ${maxWidthClasses[chosenSize]} max-w-[calc(100vw-1.5rem)] bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-4 sm:p-6 overflow-hidden z-10 animate-slide-up max-h-[92vh] flex flex-col ${className}`}
         role="dialog"
         aria-modal="true"
       >

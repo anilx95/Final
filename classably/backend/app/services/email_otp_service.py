@@ -380,7 +380,12 @@ class EmailOTPService:
         ) or "ClassAbly"
         from_name = from_name.strip()
 
-        purpose_label = "Account Registration" if purpose == "register" else "Secure Account Login" if purpose == "login" else purpose.capitalize()
+        purpose_label = (
+            "Account Registration" if purpose == "register"
+            else "Secure Account Login" if purpose == "login"
+            else "Password Reset" if purpose in ["reset_password", "forgot_password"]
+            else purpose.capitalize()
+        )
         subject = f"{otp_code} is your {from_name} Verification Code"
 
         html_content = f"""

@@ -162,7 +162,7 @@ export const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-4 py-8 relative overflow-hidden">
+    <div className="min-h-screen bg-[#06090f] flex items-center justify-center p-3 sm:p-4 py-6 sm:py-8 relative overflow-hidden">
       <div className="w-full max-w-xl relative z-10">
         <div className="text-center mb-6">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 mx-auto flex items-center justify-center text-white font-black text-xl shadow-xl shadow-sky-500/20 mb-2">
@@ -172,7 +172,7 @@ export const Register: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1">Join the Smart Classroom Accessibility Network</p>
         </div>
 
-        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#0d131f] border border-[#1b2538] rounded-2xl p-4 sm:p-8 shadow-2xl">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Role Selection Tabs */}
             <div>
@@ -351,7 +351,7 @@ export const Register: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-300 mb-2">
                     Disability & Assistive Accommodations (Optional)
                   </label>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     {[
                       { id: 'visual_impairment', label: 'Visual Impairment' },
                       { id: 'hearing_impairment', label: 'Hearing Impairment' },

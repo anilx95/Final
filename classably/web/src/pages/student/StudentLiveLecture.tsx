@@ -1033,7 +1033,7 @@ export const StudentLiveLecture: React.FC = () => {
           <Card
             variant="default"
             padding="none"
-            className="overflow-hidden relative bg-black h-80 sm:h-[440px] lg:h-[490px] flex items-center justify-center rounded-2xl shadow-2xl cursor-pointer"
+            className="overflow-hidden relative bg-black h-64 sm:h-80 md:h-[440px] lg:h-[490px] w-full flex items-center justify-center rounded-2xl shadow-2xl cursor-pointer"
             onClick={() => isAudioMuted && hasAudio && handleUnmute()}
           >
             <video
@@ -1044,9 +1044,9 @@ export const StudentLiveLecture: React.FC = () => {
             {isAudioMuted && sessionStatus === 'ACTIVE' && !isKicked && !isTeacherAway && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleUnmute(); }}
-                className="absolute top-4 right-4 z-30 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-xl animate-pulse text-xs cursor-pointer pointer-events-auto"
+                className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 z-30 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl flex items-center gap-1.5 shadow-xl animate-pulse text-[11px] sm:text-xs cursor-pointer pointer-events-auto"
               >
-                <Volume2 className="w-4 h-4" /> Tap to Unmute Audio
+                <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Tap to Unmute Audio
               </button>
             )}
 
@@ -1154,11 +1154,11 @@ export const StudentLiveLecture: React.FC = () => {
 
             {/* CC Controls Overlay */}
             {sessionStatus === 'ACTIVE' && (
-              <div className="absolute top-3.5 left-3.5 z-30 flex items-center gap-2 pointer-events-auto">
+              <div className="absolute top-3.5 left-3.5 z-30 flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setIsCcEnabled(!isCcEnabled); }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1.5 shadow-lg ${
+                  className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 shadow-lg ${
                     isCcEnabled
                       ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-yellow-500/10 hover:bg-yellow-500/30'
                       : 'bg-[#0d131f]/80 text-slate-400 border-[#1b2538] hover:text-slate-200'
@@ -1196,12 +1196,12 @@ export const StudentLiveLecture: React.FC = () => {
 
             {/* Netflix Style CC Subtitle Overlay */}
             {sessionStatus === 'ACTIVE' && isCcEnabled && activeSubtitleText && (
-              <div className={`absolute ${subtitlePosition === 'top' ? 'top-14 sm:top-16' : 'bottom-10 sm:bottom-12'} left-1/2 -translate-x-1/2 z-30 max-w-[85%] w-auto pointer-events-none transition-all duration-150 animate-fade-in`}>
-                <div className="bg-black/85 backdrop-blur-sm px-4.5 py-2 rounded-xl border border-white/15 shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-150">
+              <div className={`absolute ${subtitlePosition === 'top' ? 'top-14 sm:top-16' : 'bottom-6 sm:bottom-10'} left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-xl pointer-events-none transition-all duration-150 animate-fade-in px-1`}>
+                <div className="bg-black/90 backdrop-blur-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-white/15 shadow-2xl flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-150 text-center max-w-full">
                   <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
                     CC • {getLanguageByCode(targetLang)?.name?.toUpperCase() || targetLang.toUpperCase()}
                   </span>
-                  <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} text-center leading-snug tracking-wide drop-shadow-md`}>
+                  <p className={`text-yellow-300 sm:text-yellow-200 font-extrabold ${subtitleSizeClass} leading-snug tracking-wide drop-shadow-md break-words max-w-full`}>
                     {activeSubtitleText}
                   </p>
                 </div>
@@ -1213,7 +1213,7 @@ export const StudentLiveLecture: React.FC = () => {
           <audio ref={audioRef} autoPlay playsInline muted={isAudioMuted} className="hidden" />
 
           {/* Automatic AI Visual Learning Engine (Auto-Synced with Teacher Speech) */}
-          <div className="h-[480px]">
+          <div className="h-[380px] sm:h-[480px]">
             <VisualLearningEngine
               liveTranscript={
                 liveSpeechText ||
@@ -1276,9 +1276,9 @@ export const StudentLiveLecture: React.FC = () => {
                     }
                   }
                   return (
-                    <div key={sub.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] text-xs">
-                      <span className="font-bold text-sky-400 font-mono text-[11px]">{sub.speaker}: </span>
-                      <span className="text-slate-200">{displayText}</span>
+                    <div key={sub.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] text-xs break-words max-w-full">
+                      <span className="font-bold text-sky-400 font-mono text-[11px] shrink-0">{sub.speaker}: </span>
+                      <span className="text-slate-200 break-words leading-relaxed">{displayText}</span>
                     </div>
                   );
                 })

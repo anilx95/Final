@@ -28,7 +28,7 @@ export const Tabs: React.FC<TabsProps> = ({
   const tabList = items || tabs || [];
 
   return (
-    <div className={`flex items-center gap-1 p-1 rounded-xl bg-[#080c14] border border-[#1b2538] w-fit overflow-x-auto ${className}`}>
+    <div className={`flex items-center gap-1 p-1 rounded-xl bg-[#080c14] border border-[#1b2538] w-full sm:w-fit max-w-full overflow-x-auto no-scrollbar ${className}`}>
       {tabList.map((tab) => {
         const isActive = activeTab === tab.id;
         const displayBadge = tab.badge !== undefined ? tab.badge : tab.count;

@@ -18,6 +18,13 @@
     --ai-accent: #6366f1;
   }
 
+  html {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     background-color: #06090f;
     color: #f1f5f9;
@@ -25,6 +32,10 @@
     letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    position: relative;
   }
 
   /* High Contrast Accessibility Themes */
@@ -46,8 +57,8 @@
 
   /* Custom Clean Dark Scrollbars */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -64,54 +75,54 @@
 @layer components {
   /* Buttons */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-sky-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-sky-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
   }
   
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700 font-medium text-xs tracking-tight transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700 font-medium text-xs tracking-tight transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 font-medium text-xs tracking-tight transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 font-medium text-xs tracking-tight transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-rose-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-rose-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
   }
 
   .btn-ai {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-indigo-500/25 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-indigo-500/25 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
   }
 
   /* Cards & Surfaces */
   .card {
-    @apply bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-xl p-5 shadow-card transition-all duration-150;
+    @apply bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-xl p-4 sm:p-5 shadow-card transition-all duration-150 max-w-full;
   }
 
   .card-surface {
-    @apply bg-[#0d131f] border border-[#1b2538] rounded-xl p-5 shadow-card;
+    @apply bg-[#0d131f] border border-[#1b2538] rounded-xl p-4 sm:p-5 shadow-card max-w-full;
   }
 
   .card-interactive {
-    @apply bg-[#0d131f] border border-[#1b2538] hover:border-[#25334c] hover:bg-[#121a2a] rounded-xl p-5 shadow-card transition-all duration-150;
+    @apply bg-[#0d131f] border border-[#1b2538] hover:border-[#25334c] hover:bg-[#121a2a] rounded-xl p-4 sm:p-5 shadow-card transition-all duration-150 max-w-full;
   }
 
   .card-elevated {
-    @apply bg-[#121a2a] border border-[#25334c] rounded-xl p-6 shadow-elevated;
+    @apply bg-[#121a2a] border border-[#25334c] rounded-xl p-4 sm:p-6 shadow-elevated max-w-full;
   }
 
   .glass-panel {
-    @apply bg-slate-900/70 backdrop-blur-xl border border-slate-800/60 rounded-xl shadow-glass;
+    @apply bg-slate-900/70 backdrop-blur-xl border border-slate-800/60 rounded-xl shadow-glass max-w-full;
   }
 
   /* Inputs */
   .input-field {
-    @apply bg-[#080c14] border border-[#1b2538] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 rounded-lg px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 transition-all duration-150 outline-none w-full disabled:opacity-50;
+    @apply bg-[#080c14] border border-[#1b2538] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 transition-all duration-150 outline-none w-full disabled:opacity-50;
   }
 
   /* Badges */
   .badge {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-tight border;
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-tight border shrink-0;
   }
 
   .badge-brand {
@@ -136,6 +147,17 @@
 
   .badge-neutral {
     @apply bg-slate-800/80 text-slate-400 border-slate-700/60;
+  }
+}
+
+/* Utilities */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 

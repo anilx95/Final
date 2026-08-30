@@ -27,18 +27,25 @@ class LoginRequest(BaseModel):
 
 class SendOTPRequest(BaseModel):
     email: str
-    purpose: str = "register"  # "register" or "login"
+    purpose: str = "register"  # "register", "login", or "reset_password"
 
 
 class VerifyOTPRequest(BaseModel):
     email: str
     otp: str
-    purpose: str = "register"
+    purpose: str = "register"  # "register", "login", or "reset_password"
 
 
 class OTPLoginRequest(BaseModel):
     email: str
     otp: str
+
+
+class ResetPasswordWithOTPRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+    confirm_password: Optional[str] = None
 
 
 class UserOut(BaseModel):

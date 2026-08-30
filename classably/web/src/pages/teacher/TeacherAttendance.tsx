@@ -78,15 +78,15 @@ export const TeacherAttendance: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1">Mark daily attendance for enrolled section students</p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="hidden sm:flex items-center gap-2 text-xs font-mono">
-            <span className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-mono">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-[11px] sm:text-xs">
               {presentCount} Present
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 font-bold text-[11px] sm:text-xs">
               {absentCount} Absent
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold text-[11px] sm:text-xs">
               {lateCount} Late
             </span>
           </div>

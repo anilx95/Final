@@ -219,33 +219,33 @@ export const StudentHome: React.FC = () => {
             <div className="text-center py-8 text-slate-400 text-xs">No enrolled classes scheduled for today.</div>
           ) : (
             (timetable || []).map((slot, idx) => (
-              <div key={idx} className="p-3.5 rounded-xl bg-[#080c14] border border-[#1b2538] flex items-center justify-between gap-4 hover:border-slate-700 transition-colors">
-                <div className="flex items-center gap-3.5">
-                  <div className="px-3 py-2 rounded-lg bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0 border border-sky-500/20">
+              <div key={idx} className="p-3.5 rounded-xl bg-[#080c14] border border-[#1b2538] flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:border-slate-700 transition-colors">
+                <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                  <div className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg bg-sky-500/10 text-sky-400 font-mono text-xs font-bold shrink-0 border border-sky-500/20 whitespace-nowrap">
                     {slot.time}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {slot.subject_code && (
-                        <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                        <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 shrink-0">
                           {slot.subject_code}
                         </span>
                       )}
-                      <span className="font-bold text-slate-100 text-xs sm:text-sm">{slot.subject_name}</span>
+                      <span className="font-bold text-slate-100 text-xs sm:text-sm truncate">{slot.subject_name}</span>
                     </div>
                     {slot.topic && (
-                      <div className="text-xs text-sky-300 mt-0.5 font-medium">
+                      <div className="text-xs text-sky-300 mt-0.5 font-medium truncate">
                         Topic: {slot.topic}
                       </div>
                     )}
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Instructor: <strong className="text-slate-300">{slot.teacher_name || 'Faculty Instructor'}</strong> | Room: <strong className="text-slate-300">{slot.classroom}</strong>
+                    <div className="text-[11px] text-slate-400 mt-0.5 break-words">
+                      Instructor: <strong className="text-slate-300">{slot.teacher_name || 'Faculty Instructor'}</strong> • Room: <strong className="text-slate-300">{slot.classroom}</strong>
                     </div>
                   </div>
                 </div>
 
-                <Link to="/student/live-class" className="shrink-0">
-                  <Button variant="primary" size="sm" rightIcon={<ChevronRight className="w-3.5 h-3.5" />}>
+                <Link to="/student/live-class" className="w-full sm:w-auto shrink-0">
+                  <Button variant="primary" size="sm" className="w-full sm:w-auto" rightIcon={<ChevronRight className="w-3.5 h-3.5" />}>
                     Join Lecture
                   </Button>
                 </Link>

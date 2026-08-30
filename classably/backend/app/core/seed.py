@@ -21,8 +21,24 @@ def seed_production_data(db: Session):
 
     try:
         # Check if users exist
+        # Ensure primary admin account exists
+        anil_admin = db.query(User).filter(User.email == "anil@gmail.com").first()
+        if not anil_admin:
+            anil_admin = User(
+                full_name="Anil Administrator",
+                email="anil@gmail.com",
+                password_hash=hash_password("123456"),
+                role="admin",
+                is_active=True,
+                phone="+91-9876543210",
+                college_name="ClassAbly Admin HQ",
+            )
+            db.add(anil_admin)
+            db.commit()
+            logger.info("Configured default Admin account: anil@gmail.com")
+
         user_count = db.query(User).count()
-        if user_count > 0:
+        if user_count > 1:
             logger.info("Database already seeded with user data.")
             return
 
