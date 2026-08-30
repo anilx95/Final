@@ -300,6 +300,64 @@ def _get_fallback_sample_audio() -> str | None:
     return None
 
 
+def _get_audio_media_type(ext: str) -> str:
+    ext_lower = ext.lower().lstrip(".")
+    if ext_lower == "wav":
+        return "audio/wav"
+    if ext_lower == "mp3":
+        return "audio/mpeg"
+    if ext_lower == "ogg":
+        return "audio/ogg"
+    if ext_lower in ("m4a", "aac"):
+        return "audio/mp4"
+    if ext_lower == "mp4":
+        return "audio/mp4"
+    return "audio/webm"
+
+
+def _find_session_audio_file(session_id: int, recording: LectureRecording | None) -> str | None:
+    # 1. Check recording.audio_path if present in database
+    if recording and recording.audio_path:
+        resolved = _resolve_recording_file(recording.audio_path)
+        if resolved:
+            return resolved
+
+    # 2. Search directory candidates for direct match: lecture_{session_id}_audio_*.* or lecture_{session_id}_audio.*
+    search_dirs = [
+        os.path.abspath(os.path.join("uploads", "recordings")),
+        os.path.abspath(os.path.join("backend", "uploads", "recordings")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "recordings")),
+    ]
+    for sdir in search_dirs:
+        if os.path.exists(sdir) and os.path.isdir(sdir):
+            for fname in sorted(os.listdir(sdir), reverse=True):
+                if (fname.startswith(f"lecture_{session_id}_audio_") or fname.startswith(f"lecture_{session_id}_audio.")) and (
+                    fname.endswith(".webm") or fname.endswith(".wav") or fname.endswith(".mp3") or fname.endswith(".ogg") or fname.endswith(".m4a")
+                ):
+                    full_path = os.path.join(sdir, fname)
+                    if os.path.isfile(full_path) and os.path.getsize(full_path) > 100:
+                        return full_path
+
+    # 3. Check recording.video_path or search for lecture_{session_id}_*.webm (which contains the live audio track)
+    if recording and recording.video_path:
+        resolved_vid = _resolve_recording_file(recording.video_path)
+        if resolved_vid:
+            return resolved_vid
+
+    for sdir in search_dirs:
+        if os.path.exists(sdir) and os.path.isdir(sdir):
+            for fname in sorted(os.listdir(sdir), reverse=True):
+                if fname.startswith(f"lecture_{session_id}_") and not fname.startswith(f"lecture_{session_id}_audio_") and (
+                    fname.endswith(".webm") or fname.endswith(".mp4")
+                ):
+                    full_path = os.path.join(sdir, fname)
+                    if os.path.isfile(full_path) and os.path.getsize(full_path) > 100:
+                        return full_path
+
+    # 4. Fallback to valid sample audio if available
+    return _get_fallback_sample_audio()
+
+
 @router.get("/recording/{session_id}/download")
 def download_recording(
     session_id: int,
@@ -320,6 +378,9 @@ def download_recording(
                 path=resolved_path,
                 filename=f"Lecture_{session_id}_Recording" + os.path.splitext(filename)[1],
                 media_type=media_type,
+                headers={
+                    "Access-Control-Expose-Headers": "Content-Disposition",
+                }
             )
 
     fallback_video = _get_fallback_sample_video()
@@ -330,6 +391,9 @@ def download_recording(
             path=fallback_video,
             filename=f"Lecture_{session_id}_Recording{ext}",
             media_type=mtype,
+            headers={
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            }
         )
 
     raise HTTPException(
@@ -348,27 +412,19 @@ def download_audio_recording(
     Accessible to all users. Serves real recorded audio file or valid playable sample audio file.
     """
     recording = db.query(LectureRecording).filter(LectureRecording.session_id == session_id).first()
+    resolved_audio = _find_session_audio_file(session_id, recording)
 
-    if recording and recording.audio_path:
-        resolved_audio = _resolve_recording_file(recording.audio_path)
-        if resolved_audio:
-            filename = os.path.basename(resolved_audio)
-            ext = os.path.splitext(filename)[1]
-            media_type = "audio/wav" if ext == ".wav" else "audio/webm"
-            return FileResponse(
-                path=resolved_audio,
-                filename=f"Lecture_{session_id}_Audio{ext}",
-                media_type=media_type,
-            )
-
-    fallback_audio = _get_fallback_sample_audio()
-    if fallback_audio:
-        ext = os.path.splitext(fallback_audio)[1] or ".wav"
-        media_type = "audio/wav" if ext == ".wav" else "audio/webm"
+    if resolved_audio:
+        filename = os.path.basename(resolved_audio)
+        ext = os.path.splitext(filename)[1] or ".webm"
+        media_type = _get_audio_media_type(ext)
         return FileResponse(
-            path=fallback_audio,
+            path=resolved_audio,
             filename=f"Lecture_{session_id}_Audio{ext}",
             media_type=media_type,
+            headers={
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            }
         )
 
     raise HTTPException(

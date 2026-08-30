@@ -200,14 +200,44 @@ export const StudentStudyMaterials: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                  <a href={exportApi.downloadRecordingUrl(s.id)} download className="btn-secondary py-2 justify-between text-sky-400 border-sky-500/30">
+                  <a
+                    href={exportApi.downloadRecordingUrl(s.id)}
+                    download
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      const res = await exportApi.downloadRecordingFile(s.id);
+                      if (!res.success) {
+                        addToast({
+                          type: 'warning',
+                          title: 'Video Recording Notice',
+                          description: res.error || 'Video recording is not available for this session.',
+                        });
+                      }
+                    }}
+                    className="btn-secondary py-2 justify-between text-sky-400 border-sky-500/30 cursor-pointer"
+                  >
                     <span className="flex items-center gap-1">
                       <Video className="w-3.5 h-3.5" /> MP4 Video
                     </span>
                     <Download className="w-3 h-3" />
                   </a>
 
-                  <a href={exportApi.downloadAudioUrl(s.id)} download className="btn-secondary py-2 justify-between text-emerald-400 border-emerald-500/30">
+                  <a
+                    href={exportApi.downloadAudioUrl(s.id)}
+                    download
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      const res = await exportApi.downloadAudioFile(s.id);
+                      if (!res.success) {
+                        addToast({
+                          type: 'warning',
+                          title: 'Audio Recording Notice',
+                          description: res.error || 'Audio recording is not available for this session.',
+                        });
+                      }
+                    }}
+                    className="btn-secondary py-2 justify-between text-emerald-400 border-emerald-500/30 cursor-pointer"
+                  >
                     <span className="flex items-center gap-1">
                       <Volume2 className="w-3.5 h-3.5" /> MP3 Audio
                     </span>

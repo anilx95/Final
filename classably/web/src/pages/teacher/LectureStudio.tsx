@@ -2124,7 +2124,19 @@ export const LectureStudio: React.FC = () => {
                   <a
                     href={exportTargetSessionId ? exportApi.downloadAudioUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30 ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
+                    onClick={async (e) => {
+                      if (!exportTargetSessionId) return;
+                      e.preventDefault();
+                      const res = await exportApi.downloadAudioFile(exportTargetSessionId);
+                      if (!res.success) {
+                        addToast({
+                          type: 'warning',
+                          title: 'Audio Recording Notice',
+                          description: res.error || 'Audio recording is not available for this session.',
+                        });
+                      }
+                    }}
+                    className={`btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30 cursor-pointer ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
                     <span>Audio Recording (WEBM)</span>
                     <Download className="w-3.5 h-3.5 text-emerald-400" />
@@ -2133,7 +2145,19 @@ export const LectureStudio: React.FC = () => {
                   <a
                     href={exportTargetSessionId ? exportApi.downloadRecordingUrl(exportTargetSessionId) : '#'}
                     download
-                    className={`btn-secondary w-full justify-between text-sky-400 border-sky-500/30 ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
+                    onClick={async (e) => {
+                      if (!exportTargetSessionId) return;
+                      e.preventDefault();
+                      const res = await exportApi.downloadRecordingFile(exportTargetSessionId);
+                      if (!res.success) {
+                        addToast({
+                          type: 'warning',
+                          title: 'Video Recording Notice',
+                          description: res.error || 'Video recording is not available for this session.',
+                        });
+                      }
+                    }}
+                    className={`btn-secondary w-full justify-between text-sky-400 border-sky-500/30 cursor-pointer ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
                   >
                     <span>Full Video Recording (WEBM)</span>
                     <Download className="w-3.5 h-3.5 text-sky-400" />

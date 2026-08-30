@@ -199,6 +199,104 @@ export const exportApi = {
   downloadSummaryUrl: (sessionId: number) => `${api.defaults.baseURL || ''}/api/export/summary/${sessionId}/pdf`,
   downloadRecordingUrl: (sessionId: number) => `${api.defaults.baseURL || ''}/api/export/recording/${sessionId}/download`,
   downloadAudioUrl: (sessionId: number) => `${api.defaults.baseURL || ''}/api/export/audio/${sessionId}/download`,
+
+  downloadAudioFile: async (sessionId: number): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await api.get(`/api/export/audio/${sessionId}/download`, {
+        responseType: 'blob',
+      });
+      const blob = response.data;
+      if (blob.type === 'application/json') {
+        const text = await blob.text();
+        let errMsg = 'Audio recording is unavailable for this session.';
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.detail || errMsg;
+        } catch {}
+        return { success: false, error: errMsg };
+      }
+
+      const contentDisposition = response.headers['content-disposition'] || '';
+      let filename = `Lecture_${sessionId}_Audio.webm`;
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      return { success: true };
+    } catch (err: any) {
+      let errMsg = 'Audio recording is currently processing or unavailable for this session.';
+      if (err.response && err.response.data) {
+        if (err.response.data instanceof Blob) {
+          try {
+            const text = await err.response.data.text();
+            const parsed = JSON.parse(text);
+            errMsg = parsed.detail || errMsg;
+          } catch {}
+        } else if (err.response.data.detail) {
+          errMsg = err.response.data.detail;
+        }
+      }
+      return { success: false, error: errMsg };
+    }
+  },
+
+  downloadRecordingFile: async (sessionId: number): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await api.get(`/api/export/recording/${sessionId}/download`, {
+        responseType: 'blob',
+      });
+      const blob = response.data;
+      if (blob.type === 'application/json') {
+        const text = await blob.text();
+        let errMsg = 'Video recording is unavailable for this session.';
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.detail || errMsg;
+        } catch {}
+        return { success: false, error: errMsg };
+      }
+
+      const contentDisposition = response.headers['content-disposition'] || '';
+      let filename = `Lecture_${sessionId}_Recording.webm`;
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      return { success: true };
+    } catch (err: any) {
+      let errMsg = 'Video recording is currently processing or unavailable for this session.';
+      if (err.response && err.response.data) {
+        if (err.response.data instanceof Blob) {
+          try {
+            const text = await err.response.data.text();
+            const parsed = JSON.parse(text);
+            errMsg = parsed.detail || errMsg;
+          } catch {}
+        } else if (err.response.data.detail) {
+          errMsg = err.response.data.detail;
+        }
+      }
+      return { success: false, error: errMsg };
+    }
+  },
 };
 
 // Students Management

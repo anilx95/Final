@@ -1559,11 +1559,41 @@ export const StudentLiveLecture: React.FC = () => {
                   <span>PDF Summary</span>
                   <Download className="w-3.5 h-3.5" />
                 </a>
-                <a href={exportApi.downloadAudioUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between text-emerald-400 border-emerald-500/30">
+                <a
+                  href={exportApi.downloadAudioUrl(sessionId)}
+                  download
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    const res = await exportApi.downloadAudioFile(sessionId);
+                    if (!res.success) {
+                      addToast({
+                        type: 'warning',
+                        title: 'Audio Recording Notice',
+                        description: res.error || 'Audio recording is not available for this session.',
+                      });
+                    }
+                  }}
+                  className="btn-secondary w-full text-xs justify-between text-emerald-400 border-emerald-500/30 cursor-pointer"
+                >
                   <span>Audio Recording (WEBM/MP3)</span>
                   <Download className="w-3.5 h-3.5" />
                 </a>
-                <a href={exportApi.downloadRecordingUrl(sessionId)} download className="btn-secondary w-full text-xs justify-between text-sky-400 border-sky-500/30">
+                <a
+                  href={exportApi.downloadRecordingUrl(sessionId)}
+                  download
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    const res = await exportApi.downloadRecordingFile(sessionId);
+                    if (!res.success) {
+                      addToast({
+                        type: 'warning',
+                        title: 'Video Recording Notice',
+                        description: res.error || 'Video recording is not available for this session.',
+                      });
+                    }
+                  }}
+                  className="btn-secondary w-full text-xs justify-between text-sky-400 border-sky-500/30 cursor-pointer"
+                >
                   <span>Video Recording (WEBM/MP4)</span>
                   <Download className="w-3.5 h-3.5" />
                 </a>
