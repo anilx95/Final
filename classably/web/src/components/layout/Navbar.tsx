@@ -66,25 +66,25 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   };
 
   return (
-    <header className="h-15 bg-[#080c14]/95 border-b border-[#151d2c] backdrop-blur-xl sticky top-0 z-40 px-3 sm:px-6 flex items-center justify-between">
+    <header className="h-15 bg-white/95 border-b border-slate-200 backdrop-blur-xl sticky top-0 z-40 px-3 sm:px-6 flex items-center justify-between">
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           onClick={onToggleSidebar}
-          className="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg lg:hidden hover:bg-slate-800/80 transition-colors shrink-0"
+          className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg lg:hidden hover:bg-slate-100 transition-colors shrink-0"
           aria-label="Toggle Navigation Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
         <Link to="/" className="flex items-center gap-2 group min-w-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-sm group-hover:scale-105 transition-transform shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-teal-700 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-sm group-hover:scale-105 transition-transform shrink-0">
             C
           </div>
           <div className="min-w-0">
-            <div className="font-bold text-xs sm:text-sm text-slate-100 tracking-tight leading-none flex items-center gap-1">
-              ClassAbly <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-1 py-0.2 rounded bg-sky-500/15 text-sky-400 border border-sky-500/20">AI</span>
+            <div className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-none flex items-center gap-1">
+              ClassAbly <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-1 py-0.2 rounded bg-teal-50 text-teal-700 border border-teal-200">AI</span>
             </div>
-            <p className="text-[10px] text-slate-400 tracking-tight font-medium mt-0.5 hidden sm:block truncate">Smart Classroom Accessibility</p>
+            <p className="text-[10px] text-slate-500 tracking-tight font-medium mt-0.5 hidden sm:block truncate">Smart classroom learning</p>
           </div>
         </Link>
       </div>
@@ -110,7 +110,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg hover:bg-slate-800/60 transition-colors relative"
+            className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors relative"
             aria-label="Notifications"
           >
             <Bell className="w-4 h-4" />
@@ -120,10 +120,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-4 z-50 animate-fade-in">
-              <div className="flex items-center justify-between pb-3 border-b border-[#1b2538]">
-                <h4 className="font-bold text-xs text-slate-100">Notifications</h4>
-                <Link to="/notifications" onClick={() => setShowNotifications(false)} className="text-[11px] text-sky-400 hover:underline">
+            <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-xs sm:w-80 bg-white border border-slate-200 rounded-lg shadow-xl p-4 z-50 animate-fade-in">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                <h4 className="font-bold text-xs text-slate-900">Notifications</h4>
+                <Link to="/notifications" onClick={() => setShowNotifications(false)} className="text-[11px] text-teal-700 hover:underline">
                   View All
                 </Link>
               </div>
@@ -132,9 +132,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   <p className="text-xs text-slate-400 py-6 text-center">No unread notifications</p>
                 ) : (
                   notifications.slice(0, 5).map((n) => (
-                    <div key={n.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#151d2c] text-xs">
-                      <div className="font-semibold text-slate-200">{n.title}</div>
-                      <div className="text-slate-400 text-[11px] mt-0.5">{n.message}</div>
+                    <div key={n.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                      <div className="font-semibold text-slate-800">{n.title}</div>
+                      <div className="text-slate-500 text-[11px] mt-0.5">{n.message}</div>
                     </div>
                   ))
                 )}
@@ -144,12 +144,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
         </div>
 
         {/* Profile & Logout */}
-        <div className="flex items-center gap-1.5 pl-2 border-l border-[#1b2538]">
+        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
           <Link
             to="/profile"
-            className="flex items-center gap-2 text-slate-200 hover:text-white p-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+            className="flex items-center gap-2 text-slate-700 hover:text-slate-900 p-1 rounded-lg hover:bg-slate-100 transition-colors"
           >
-            <div className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-xs font-bold text-sky-300">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-xs font-bold text-teal-700">
               {user?.full_name?.charAt(0) || 'U'}
             </div>
             <span className="text-xs font-medium hidden sm:inline">{user?.full_name}</span>
@@ -157,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
           <Link
             to="/settings"
-            className="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg hover:bg-slate-800/60 transition-colors hidden sm:block"
+            className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors hidden sm:block"
             title="Settings"
           >
             <Settings className="w-4 h-4" />
@@ -165,7 +165,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
           <button
             onClick={handleLogout}
-            className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800/60 transition-colors"
+            className="p-1.5 text-slate-600 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition-colors"
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />

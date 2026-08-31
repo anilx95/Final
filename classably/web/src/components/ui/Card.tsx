@@ -12,7 +12,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   className = '',
   ...props
 }, ref) => {
-  const baseClasses = 'rounded-xl transition-all duration-150 relative overflow-hidden';
+  const baseClasses = 'rounded-lg transition-all duration-150 relative overflow-hidden';
 
   const paddingClasses = {
     none: 'p-0',
@@ -22,11 +22,11 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(({
   };
 
   const variantClasses = {
-    default: 'bg-[#0d131f] border border-[#1b2538] shadow-card',
-    interactive: 'bg-[#0d131f] border border-[#1b2538] hover:border-[#25334c] hover:bg-[#121a2a] shadow-card cursor-pointer',
-    elevated: 'bg-[#121a2a] border border-[#25334c] shadow-elevated',
-    ai: 'bg-gradient-to-br from-[#0d131f] via-[#12162a] to-[#0d131f] border border-indigo-500/25 shadow-card hover:border-indigo-500/40',
-    glass: 'bg-slate-900/70 backdrop-blur-xl border border-slate-800/80 shadow-glass',
+    default: 'bg-white border border-slate-200 shadow-sm',
+    interactive: 'bg-white border border-slate-200 hover:border-teal-300 hover:bg-teal-50/40 shadow-sm cursor-pointer',
+    elevated: 'bg-slate-50 border border-slate-200 shadow-sm',
+    ai: 'bg-white border border-indigo-200 shadow-sm hover:border-indigo-300',
+    glass: 'bg-white/90 backdrop-blur-xl border border-slate-200 shadow-sm',
   };
 
   return (

@@ -80,13 +80,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       )}
 
       <aside
-        className={`fixed lg:sticky top-15 left-0 z-40 w-60 h-[calc(100vh-3.75rem)] bg-[#080c14] border-r border-[#151d2c] transition-transform duration-200 flex flex-col justify-between ${
+        className={`fixed lg:sticky top-15 left-0 z-40 w-60 h-[calc(100vh-3.75rem)] bg-white border-r border-slate-200 transition-transform duration-200 flex flex-col justify-between ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         <div className="p-3 space-y-4 overflow-y-auto">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 mb-2 font-mono">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2.5 mb-2">
               {role === 'admin' ? 'Administrative Suite' : role === 'teacher' ? 'Faculty Studio' : 'Student Portal'}
             </p>
             <nav className="space-y-0.5">
@@ -101,15 +101,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     className={({ isActive }) =>
                       `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold tracking-tight transition-all duration-150 relative group ${
                         isActive
-                          ? 'bg-[#1b2538] text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-100 hover:bg-[#0d131f]'
+                          ? 'bg-teal-50 text-teal-900 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                       }`
                     }
                   >
                     {({ isActive }) => (
                       <>
                         {isActive && (
-                          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-sky-500" />
+                          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-teal-600" />
                         )}
                         <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-sky-400' : 'text-slate-400 group-hover:text-slate-300'}`} />
                         <span className="truncate">{item.label}</span>
@@ -123,9 +123,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* User Info Footer Card */}
-        <div className="p-3 border-t border-[#151d2c] bg-[#06090f]/60">
-          <div className="flex items-center gap-2.5 p-1.5 rounded-lg bg-[#0d131f] border border-[#1b2538]">
-            <div className="w-7 h-7 rounded-md bg-sky-500/15 border border-sky-500/30 text-sky-300 flex items-center justify-center font-bold text-xs shrink-0">
+        <div className="p-3 border-t border-slate-200 bg-slate-50">
+          <div className="flex items-center gap-2.5 p-1.5 rounded-lg bg-white border border-slate-200">
+            <div className="w-7 h-7 rounded-md bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center font-bold text-xs shrink-0">
               {user?.full_name?.charAt(0) || 'U'}
             </div>
             <div className="min-w-0 flex-1">

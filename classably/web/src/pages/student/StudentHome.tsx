@@ -36,15 +36,13 @@ export const StudentHome: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* Welcome Banner */}
-      <Card variant="ai" className="p-6">
+      <Card variant="default" className="p-6 border-l-4 border-l-teal-600">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <Badge variant="brand" size="sm">
-                Student Accessibility Workspace
-              </Badge>
+              <Badge variant="brand" size="sm">Learning workspace</Badge>
               {(activeDisabilities || []).length > 0 && (
                 <Badge variant="ai" size="sm">
                   <Sparkles className="w-3 h-3" /> {(activeDisabilities || []).length} Accommodations Active
@@ -55,7 +53,7 @@ export const StudentHome: React.FC = () => {
               Welcome, {user?.full_name || 'Student'}!
             </h1>
             <p className="text-xs text-slate-400 mt-1 max-w-xl">
-              Your personalized accessible learning environment is active. Real-time neural translations, screen reading, and closed captions are ready.
+              Your classes, live captions, and learning support are ready when you need them.
             </p>
           </div>
 
@@ -70,7 +68,7 @@ export const StudentHome: React.FC = () => {
             </Button>
             <Link to="/student/live-class">
               <Button variant="primary" size="sm" leftIcon={<Video className="w-4 h-4" />}>
-                Join Active Class
+                Open live class
               </Button>
             </Link>
           </div>
@@ -104,7 +102,7 @@ export const StudentHome: React.FC = () => {
         </Link>
       </Card>
 
-      {/* Main Student Shortcuts */}
+      {/* Essential student destinations */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <Link to="/student/live-class" className="block group">
           <Card variant="interactive" className="h-full">
@@ -114,8 +112,8 @@ export const StudentHome: React.FC = () => {
               </div>
               <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-sky-400 transition-colors" />
             </div>
-            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Join Live Classroom</h3>
-            <p className="text-xs text-slate-400 mt-1">Live board stream, neural translations & interactive AI visualizer</p>
+            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Live classroom</h3>
+            <p className="text-xs text-slate-400 mt-1">Video, captions, questions, and lesson context in one place.</p>
           </Card>
         </Link>
 
@@ -127,8 +125,8 @@ export const StudentHome: React.FC = () => {
               </div>
               <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition-colors" />
             </div>
-            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Voice Command Studio</h3>
-            <p className="text-xs text-slate-400 mt-1">Hands-free classroom control, question asking & accessibility calls</p>
+            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Voice assistant</h3>
+            <p className="text-xs text-slate-400 mt-1">Hands-free help and classroom controls.</p>
           </Card>
         </Link>
 
@@ -140,8 +138,8 @@ export const StudentHome: React.FC = () => {
               </div>
               <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-400 transition-colors" />
             </div>
-            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Study Materials & Notes</h3>
-            <p className="text-xs text-slate-400 mt-1">Download AI summaries, lecture transcripts, and VTT caption files</p>
+            <h3 className="font-bold text-slate-100 text-sm tracking-tight">Study materials</h3>
+            <p className="text-xs text-slate-400 mt-1">Notes, summaries, transcripts, and caption files.</p>
           </Card>
         </Link>
       </div>

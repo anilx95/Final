@@ -24,7 +24,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   return (
     <div className="w-full space-y-1.5">
       {label && (
-        <label htmlFor={inputId} className="block text-xs font-semibold text-slate-300">
+        <label htmlFor={inputId} className="block text-sm font-semibold text-slate-700">
           {label}
         </label>
       )}
@@ -38,13 +38,13 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
           ref={ref}
           id={inputId}
           disabled={disabled}
-          className={`w-full bg-[#080c14] border ${
-            error ? 'border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/30' : 'border-[#1b2538] focus:border-sky-500 focus:ring-sky-500/30'
-          } focus:ring-1 rounded-lg ${
+          className={`w-full bg-white border ${
+            error ? 'border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/30' : 'border-slate-300 focus:border-teal-600 focus:ring-teal-600/20'
+          } focus:ring-2 rounded-lg ${
             leftIcon ? 'pl-9' : 'pl-3.5'
           } ${
             rightIcon ? 'pr-9' : 'pr-3.5'
-          } py-2 text-xs text-slate-100 placeholder-slate-500 transition-all duration-150 outline-none disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+          } py-2.5 text-sm text-slate-900 placeholder-slate-400 transition-all duration-150 outline-none disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
           {...props}
         />
         {rightIcon && (

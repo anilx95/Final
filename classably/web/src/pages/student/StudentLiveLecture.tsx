@@ -965,7 +965,7 @@ export const StudentLiveLecture: React.FC = () => {
   const subtitleSizeClass = subtitleSize === 'sm' ? 'text-xs' : subtitleSize === 'lg' ? 'text-lg' : 'text-sm sm:text-base';
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* Top Header Bar */}
       <Card variant="default" padding="sm" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
@@ -1027,9 +1027,9 @@ export const StudentLiveLecture: React.FC = () => {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left 2 Cols: Video & Transcript */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-5">
           <Card
             variant="default"
             padding="none"
@@ -1328,7 +1328,7 @@ export const StudentLiveLecture: React.FC = () => {
         </div>
 
         {/* Right 1 Col: AI Chat, Raise Hand, Downloads */}
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* AI Q&A Chat Panel */}
           <Card variant="default" className="space-y-3 shadow-xl">
             <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
