@@ -52,6 +52,21 @@ class LiveSubtitle(Base):
     session = relationship("LectureSession", back_populates="subtitles")
 
 
+class LiveLearningState(Base):
+    """Versioned, incremental learning state produced from finalized speech."""
+    __tablename__ = "live_learning_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("lecture_sessions.id"), nullable=False, unique=True, index=True)
+    processed_subtitle_id = Column(Integer, nullable=True)
+    version = Column(Integer, nullable=False, default=0)
+    summary = Column(JSON, default=dict)
+    topic_map = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = relationship("LectureSession")
+
+
 class BoardSnapshot(Base):
     __tablename__ = "board_snapshots"
 

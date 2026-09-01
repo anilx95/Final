@@ -12,9 +12,6 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-FALLBACK_GEMINI_KEY = "AIzaSyCcHet8fecwZ8bnXuQwcLCUz00ceAMvA8w"
-
-
 class AIQAService:
     """ChatGPT-style general-purpose AI assistant and context-grounded lecture summarizer."""
 
@@ -26,7 +23,7 @@ class AIQAService:
         try:
             from app.core.config import settings
             key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY", "")
-            if key and key != "your_gemini_api_key_here" and key != FALLBACK_GEMINI_KEY:
+            if key and key != "your_gemini_api_key_here":
                 return key
         except Exception:
             pass

@@ -95,6 +95,7 @@ export const lectureApi = {
     api.post('/api/lecture-session/subtitles/ingest', data),
   getSubtitles: (sessionId: number, targetLang = 'en') =>
     api.get(`/api/lecture-session/subtitles/${sessionId}`, { params: { target_lang: targetLang } }),
+  getLiveLearning: (sessionId: number) => api.get(`/api/lecture-session/live-learning/${sessionId}`),
   translate: (data: { text: string; target_lang: string }) =>
     api.post('/api/lecture-session/translate', data),
   raiseHand: (data: { session_id: number; student_id?: number; question_text?: string }) =>

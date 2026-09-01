@@ -19,6 +19,7 @@ from app.models.entities.connected_student import ConnectedStudent
 from app.services.lecture_session_service import lecture_session_service
 from app.services.translation_service import translation_service
 from app.services.ai_qa_service import ai_qa_service
+from app.services.live_learning_service import get_live_learning_state, schedule_live_learning_update
 
 import asyncio
 from app.services.ws_manager import ws_manager
@@ -421,6 +422,9 @@ async def ingest_subtitle(
         db.commit()
         db.refresh(subtitle)
         subtitle_id = subtitle.id
+        # Finalized speech is the only input to the incremental learning pipeline.
+        # The scheduler coalesces short phrases into one append-and-refine update.
+        await schedule_live_learning_update(session_id)
 
     # Broadcast subtitle via WebSocket only if requested or default
     should_broadcast = payload.get("broadcast", True)
@@ -457,6 +461,13 @@ async def ingest_subtitle(
         "translations": all_translations,
         "is_interim": is_interim,
     }
+
+
+@router.get("/live-learning/{session_id}")
+def get_live_learning(session_id: int, db: Session = Depends(get_db)):
+    """Return the latest versioned summary and map for a student joining mid-class."""
+    state = get_live_learning_state(session_id, db)
+    return {"success": True, "state": state}
 
 
 @router.get("/subtitles/{session_id}")

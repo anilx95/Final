@@ -65,8 +65,6 @@ async def analyze_board_image(upload_file) -> dict:
     try:
         from app.core.config import settings
         api_key = settings.GEMINI_API_KEY
-        if not api_key or api_key == "your_gemini_api_key_here":
-            api_key = "AIzaSyCcHet8fecwZ8bnXuQwcLCUz00ceAMvA8w"
 
         if api_key:
             import google.generativeai as genai

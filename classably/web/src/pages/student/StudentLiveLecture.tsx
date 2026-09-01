@@ -5,7 +5,7 @@ import {
   Settings as SettingsIcon, PictureInPicture2, Send, ChevronDown, ChevronUp,
   User, Play, Loader2, FileText, Check, Activity, Radio
 } from 'lucide-react';
-import { lectureApi, academicsApi, aiQaApi } from '../../api/client';
+import { lectureApi, academicsApi } from '../../api/client';
 import { LiveSubtitle, AIQAMessage, AILectureSummary, TimetableItem } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
@@ -94,7 +94,6 @@ export const StudentLiveLecture: React.FC = () => {
 
   // Real-Time Dynamic Mind Map
   const [mindMapData, setMindMapData] = useState<DynamicMindMap | null>(null);
-  const [isGeneratingMap, setIsGeneratingMap] = useState<boolean>(false);
 
   // Raise Hand & Question State
   const [questionText, setQuestionText] = useState('');
@@ -127,7 +126,7 @@ export const StudentLiveLecture: React.FC = () => {
   const subtitleClearTimerRef = useRef<any>(null);
   const subtitleContainerRef = useRef<HTMLDivElement | null>(null);
   const lastRawEnglishSubtitleRef = useRef<string>('');
-  const mindMapDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveLearningVersionRef = useRef(0);
 
   const peerIdRef = useRef<string>(
     `student_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
@@ -197,94 +196,9 @@ export const StudentLiveLecture: React.FC = () => {
   }, [isVideoHidden, addToast]);
 
   // ─── Real-Time Mind Map & Live Summary Generator ──────────────────────────
-  const updateRealTimeMindMapAndSummary = useCallback((currentSubs: LiveSubtitle[], topic: string, subject: string) => {
-    if (mindMapDebounceRef.current) {
-      clearTimeout(mindMapDebounceRef.current);
-    }
-
-    mindMapDebounceRef.current = setTimeout(async () => {
-      if (!isMountedRef.current) return;
-      const fullText = currentSubs.map((s) => s.text || s.original_text || '').filter(Boolean).join(' ').trim();
-      const effectiveTopic = topic || subject || (currentSubs.length > 0 ? currentSubs[0].text?.split(' ')[0] : '') || 'Active Lecture';
-
-      // 1. Generate Live Summary Points in Real-Time from Speech
-      if (currentSubs.length > 0) {
-        const rawPoints: string[] = [];
-        currentSubs.slice(-6).forEach((s) => {
-          const t = (s.text || s.original_text || '').trim();
-          if (t.length > 12 && !rawPoints.includes(t)) {
-            rawPoints.push(t);
-          }
-        });
-
-        if (rawPoints.length > 0) {
-          setLiveSummaryPoints(rawPoints);
-        }
-      }
-
-      // 2. Generate Real Dynamic Mind Map from Speech & Context
-      if (fullText.length > 10 || effectiveTopic.length > 2) {
-        setIsGeneratingMap(true);
-        try {
-          const res = await aiQaApi.visualizeDiagram({
-            topic: effectiveTopic,
-            transcript: fullText,
-            subject: subject || 'Science',
-            target_lang: targetLangRef.current,
-          });
-
-          if (res.data?.diagram?.nodes && res.data.diagram.nodes.length >= 2) {
-            const nodes = res.data.diagram.nodes;
-            const rootLabel = res.data.diagram.title?.split('(')[0]?.trim() || nodes[0].label || effectiveTopic;
-            const rootNode: MindMapNode = {
-              id: nodes[0].id || 'root',
-              label: rootLabel.length > 18 ? rootLabel.substring(0, 16) + '...' : rootLabel,
-              color: '#2563eb',
-              desc: nodes[0].desc,
-            };
-
-            const childPalette = ['#0284c7', '#16a34a', '#ea580c', '#8b5cf6', '#ec4899'];
-            const children: MindMapNode[] = nodes.slice(1, 4).map((n: any, idx: number) => ({
-              id: n.id || `child_${idx}`,
-              label: (targetLangRef.current !== 'en' && n.translated_label) ? n.translated_label : n.label,
-              color: n.color || childPalette[idx % childPalette.length],
-              desc: n.desc,
-            }));
-
-            setMindMapData({ root: rootNode, children });
-            return;
-          }
-        } catch {
-          // Fallback to client-side semantic node extraction
-        } finally {
-          if (isMountedRef.current) setIsGeneratingMap(false);
-        }
-
-        // Semantic Fallback Generator based on live speech words
-        if (currentSubs.length > 0) {
-          const rootNode: MindMapNode = {
-            id: 'root_live',
-            label: effectiveTopic.length > 16 ? effectiveTopic.substring(0, 14) + '..' : effectiveTopic,
-            color: '#2563eb',
-          };
-
-          const words = fullText.split(/[.,!?\s]+/).filter((w) => w.length > 4);
-          const uniqueKeywords = Array.from(new Set(words)).slice(0, 3);
-          const childColors = ['#0284c7', '#16a34a', '#ea580c'];
-
-          const children: MindMapNode[] = uniqueKeywords.map((kw, i) => ({
-            id: `kw_${i}`,
-            label: kw.charAt(0).toUpperCase() + kw.slice(1),
-            color: childColors[i % childColors.length],
-          }));
-
-          if (children.length >= 2) {
-            setMindMapData({ root: rootNode, children });
-          }
-        }
-      }
-    }, 1200);
-  }, []);
+  // The server owns the persistent append-and-refine state. This avoids
+  // independently generating a map from captions that the summary never used.
+  const updateRealTimeMindMapAndSummary = useCallback((_subtitles: LiveSubtitle[], _topic: string, _subject: string) => {}, []);
 
   // Language Change Handler
   const handleLanguageChange = (newLang: string) => {
@@ -533,6 +447,29 @@ export const StudentLiveLecture: React.FC = () => {
             sessionStatusRef.current = 'ACTIVE';
             setSessionStatus('ACTIVE');
           }
+          return;
+        }
+
+        // Versioned server pipeline: finalized transcript → evolving summary → topic map.
+        // Ignore late responses so an older map can never overwrite a newer one.
+        if (message.type === 'live_learning_update' && message.session_id === sessionIdRef.current) {
+          const version = Number(message.version || 0);
+          if (version <= liveLearningVersionRef.current) return;
+          liveLearningVersionRef.current = version;
+          const summary = message.summary || {};
+          const map = message.topic_map || {};
+          const nodes = Array.isArray(map.nodes) ? map.nodes : [];
+          const root = nodes.find((node: any) => node.id === 'root') || nodes[0];
+          if (root) {
+            setMindMapData({
+              root: { id: root.id, label: root.label, color: root.color || '#2563eb', desc: root.desc },
+              children: nodes.filter((node: any) => node.id !== root.id).slice(0, 3).map((node: any) => ({
+                id: node.id, label: node.label, color: node.color || '#0284c7', desc: node.desc,
+              })),
+            });
+          }
+          setSummaryData(summary as AILectureSummary);
+          setLiveSummaryPoints(Array.isArray(summary.key_points) ? summary.key_points : []);
           return;
         }
 
@@ -827,7 +764,7 @@ export const StudentLiveLecture: React.FC = () => {
     return () => clearInterval(interval);
   }, [classroomId]);
 
-  // Load existing session subtitles & summary on session connect
+  // Restore persisted incremental state when a student joins an in-progress class.
   useEffect(() => {
     if (!sessionId || sessionStatus !== 'ACTIVE') return;
     lectureApi.getSubtitles(sessionId, targetLang).then((res) => {
@@ -837,12 +774,22 @@ export const StudentLiveLecture: React.FC = () => {
       }
     }).catch(() => {});
 
-    aiQaApi.getSummary(sessionId).then((res) => {
-      if (res.data && sessionStatusRef.current === 'ACTIVE') {
-        setSummaryData(res.data);
-        if (res.data.key_points && Array.isArray(res.data.key_points)) {
-          setLiveSummaryPoints(res.data.key_points);
-        }
+    lectureApi.getLiveLearning(sessionId).then((res) => {
+      const state = res.data?.state;
+      if (!state || sessionStatusRef.current !== 'ACTIVE') return;
+      liveLearningVersionRef.current = Number(state.version || 0);
+      const summary = state.summary || {};
+      const nodes = Array.isArray(state.topic_map?.nodes) ? state.topic_map.nodes : [];
+      const root = nodes.find((node: any) => node.id === 'root') || nodes[0];
+      setSummaryData(summary as AILectureSummary);
+      setLiveSummaryPoints(Array.isArray(summary.key_points) ? summary.key_points : []);
+      if (root) {
+        setMindMapData({
+          root: { id: root.id, label: root.label, color: root.color || '#2563eb', desc: root.desc },
+          children: nodes.filter((node: any) => node.id !== root.id).slice(0, 3).map((node: any) => ({
+            id: node.id, label: node.label, color: node.color || '#0284c7', desc: node.desc,
+          })),
+        });
       }
     }).catch(() => {});
   }, [sessionId, targetLang, sessionStatus, updateRealTimeMindMapAndSummary]);
@@ -1234,7 +1181,6 @@ export const StudentLiveLecture: React.FC = () => {
                 <BookOpen className="w-4 h-4 text-[#1d3bb5]" />
                 <h3 className="font-bold text-slate-900 text-sm tracking-tight flex items-center gap-1.5">
                   <span>Topic Map</span>
-                  {isGeneratingMap && <Loader2 className="w-3 h-3 text-[#1d3bb5] animate-spin" />}
                 </h3>
               </div>
               <button
