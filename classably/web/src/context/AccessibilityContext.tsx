@@ -5,7 +5,6 @@ export type DisabilityProfile =
   | 'low_vision' 
   | 'hearing_impairment' 
   | 'language_barrier' 
-  | 'motor_disability' 
   | 'multiple_disabilities';
 
 export type HighContrastMode = 'none' | 'yellow-on-black' | 'black-on-white';

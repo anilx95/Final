@@ -107,23 +107,26 @@ export const VoiceAssistantStudio: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-5xl animate-fade-in">
+      {/* Page Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
-          <Mic className="w-5 h-5 text-indigo-400" /> Voice Assistant Studio
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight">
+          Voice Assistant Studio
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Hands-free voice control for motor disabilities & classroom environment automation</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Hands-free classroom controls and environment automation.
+        </p>
       </div>
 
       {/* Voice Assistant Interaction Box */}
-      <Card variant="ai" className="text-center p-8 space-y-5">
+      <Card variant="default" className="text-center p-8 space-y-5 border-[#dbeafe] bg-gradient-to-b from-white to-blue-50/20">
         <div className="relative w-20 h-20 mx-auto">
           <button
             onClick={toggleSpeechRecognition}
-            className={`w-20 h-20 rounded-full border-4 flex items-center justify-center text-white transition-all shadow-xl ${
+            className={`w-20 h-20 rounded-full border-4 flex items-center justify-center text-white transition-all shadow-xl cursor-pointer ${
               isListening
                 ? 'bg-rose-600 border-rose-400 animate-pulse'
-                : 'bg-indigo-600 hover:bg-indigo-500 border-indigo-400 shadow-indigo-500/30'
+                : 'bg-[#1d3bb5] hover:bg-[#173099] border-blue-200 shadow-blue-500/20'
             }`}
           >
             {isListening ? <MicOff className="w-8 h-8 animate-bounce" /> : <Mic className="w-8 h-8" />}
@@ -131,11 +134,11 @@ export const VoiceAssistantStudio: React.FC = () => {
         </div>
 
         <div>
-          <h3 className="font-bold text-slate-100 text-base sm:text-lg tracking-tight">
+          <h3 className="font-bold text-[#111827] text-base sm:text-lg tracking-tight">
             {isListening ? 'Listening for your voice command...' : 'Tap Microphone to Speak Command'}
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
-            Try saying: <code className="text-sky-300 font-mono font-bold">"Turn on lights"</code>, <code className="text-sky-300 font-mono font-bold">"Raise desk"</code>, or <code className="text-sky-300 font-mono font-bold">"Call teacher"</code>
+          <p className="text-xs text-slate-500 mt-1">
+            Try saying: <code className="text-[#1d3bb5] font-mono font-bold">"Turn on lights"</code>, <code className="text-[#1d3bb5] font-mono font-bold">"Raise desk"</code>, or <code className="text-[#1d3bb5] font-mono font-bold">"Call teacher"</code>
           </p>
         </div>
 
@@ -152,7 +155,7 @@ export const VoiceAssistantStudio: React.FC = () => {
             placeholder="Or type voice command here..."
             value={commandText}
             onChange={(e) => setCommandText(e.target.value)}
-            className="input-field text-xs flex-1"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none flex-1"
           />
           <Button
             type="submit"
@@ -168,19 +171,17 @@ export const VoiceAssistantStudio: React.FC = () => {
       </Card>
 
       {/* Recommended Voice Commands Grid */}
-      <Card variant="default" className="space-y-3">
-        <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
-          <Sparkles className="w-4 h-4 text-sky-400" /> Supported Voice Phrases
+      <Card variant="default" className="p-5 sm:p-6 space-y-3">
+        <h3 className="font-bold text-[#111827] text-base flex items-center gap-2 tracking-tight">
+          <Sparkles className="w-4 h-4 text-[#1d3bb5]" /> Supported Voice Phrases
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
           {[
             { label: 'Turn On Lights', phrase: 'lights_on' },
             { label: 'Turn Off Lights', phrase: 'lights_off' },
             { label: 'Start Fan', phrase: 'fan_on' },
             { label: 'Stop Fan', phrase: 'fan_off' },
-            { label: 'Raise Wheelchair Desk', phrase: 'desk_up' },
-            { label: 'Lower Wheelchair Desk', phrase: 'desk_down' },
             { label: 'Next Slide', phrase: 'next_slide' },
             { label: 'Previous Slide', phrase: 'previous_slide' },
             { label: 'Call Teacher Assistance', phrase: 'call_teacher' },
@@ -188,7 +189,7 @@ export const VoiceAssistantStudio: React.FC = () => {
             <button
               key={cmd.phrase}
               onClick={() => handleSendCommand(cmd.label)}
-              className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] text-left font-semibold text-slate-300 hover:border-sky-500 hover:text-sky-300 transition-all duration-150"
+              className="p-3 rounded-lg bg-white border border-slate-200 text-left font-semibold text-slate-700 hover:border-[#1d3bb5] hover:text-[#1d3bb5] hover:bg-[#eff4ff]/30 transition-all duration-150 shadow-sm cursor-pointer"
             >
               {cmd.label}
             </button>
@@ -197,9 +198,9 @@ export const VoiceAssistantStudio: React.FC = () => {
       </Card>
 
       {/* Command History Trail */}
-      <Card variant="default" className="space-y-3">
-        <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
-          <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
+      <Card variant="default" className="p-5 sm:p-6 space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <h3 className="font-bold text-[#111827] text-base flex items-center gap-2 tracking-tight">
             <Clock className="w-4 h-4 text-slate-400" /> Recent Voice Command History
           </h3>
           <Badge variant="neutral" size="sm">
@@ -212,10 +213,10 @@ export const VoiceAssistantStudio: React.FC = () => {
             <p className="text-xs text-slate-500 py-4 text-center">No voice commands logged yet.</p>
           ) : (
             voiceHistory.map((log) => (
-              <div key={log.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] flex items-center justify-between text-xs">
+              <div key={log.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div>
-                  <span className="text-slate-100 font-semibold">"{log.raw_text}"</span>
-                  <span className="ml-2 text-[10px] text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
+                  <span className="text-[#111827] font-semibold">"{log.raw_text}"</span>
+                  <span className="ml-2 text-[10px] text-[#1d3bb5] bg-[#eef4ff] px-2 py-0.5 rounded border border-[#dbeafe] font-mono">
                     {log.intent}
                   </span>
                 </div>

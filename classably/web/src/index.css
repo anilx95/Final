@@ -66,6 +66,7 @@
   ::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 9999px;
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
@@ -75,7 +76,8 @@
 @layer components {
   /* Buttons */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-medium text-xs transition-all duration-150 shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-[#1d3bb5] hover:bg-[#173099] font-bold text-xs transition-all duration-150 shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    color: #ffffff !important;
   }
   
   .btn-secondary {
@@ -87,11 +89,13 @@
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-medium text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-rose-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 font-bold text-xs tracking-tight transition-all duration-150 shadow-sm hover:shadow-rose-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    color: #ffffff !important;
   }
 
   .btn-ai {
-    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition-all duration-150 shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg bg-[#1d3bb5] hover:bg-[#173099] font-bold text-xs transition-all duration-150 shadow-sm active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    color: #ffffff !important;
   }
 
   /* Cards & Surfaces */
@@ -157,17 +161,820 @@
   .bg-slate-900\/80, .bg-slate-900\/90, .bg-slate-900\/70 { background-color: rgba(255,255,255,.94) !important; }
   .bg-slate-800, .bg-slate-800\/60 { background-color: #f1f5f9 !important; }
   .border-\[\#151d2c\], .border-\[\#1b2538\], .border-\[\#25334c\], .border-slate-900, .border-slate-800, .border-slate-700 { border-color: #dbe3ed !important; }
-  .text-slate-100, .text-slate-200, .text-slate-300, .text-white { color: #162033 !important; }
+  .text-slate-100, .text-slate-200, .text-slate-300 { color: #162033 !important; }
   .text-slate-400 { color: #64748b !important; }
   .text-slate-500, .text-slate-600 { color: #75849a !important; }
   .hover\:text-slate-100:hover, .hover\:text-white:hover { color: #0f172a !important; }
   .hover\:bg-slate-800:hover, .hover\:bg-slate-800\/60:hover { background-color: #f1f5f9 !important; }
-  .btn-primary, .btn-primary *, .btn-ai, .btn-ai *, .bg-teal-700, .bg-teal-700 *, .bg-sky-600, .bg-sky-600 *, .bg-indigo-600, .bg-indigo-600 * { color: white !important; }
+  .text-white, .text-white *, .btn-primary, .btn-primary *, .btn-ai, .btn-ai *, .btn-click-here, .btn-click-here *, .bg-\[\#1d3bb5\], .bg-\[\#1d3bb5\] *, button.bg-\[\#1d3bb5\], button.bg-\[\#1d3bb5\] *, [class*="bg-[#1d3bb5]"], [class*="bg-[#1d3bb5]"] *, [class*="bg-rose-600"], [class*="bg-rose-600"] * { color: #ffffff !important; }
   .bg-sky-600, .hover\:bg-sky-500:hover { background-color: #0f766e !important; }
   .text-sky-400, .text-sky-300 { color: #0f766e !important; }
   .border-sky-500\/20, .border-sky-500\/30, .border-sky-500\/40 { border-color: rgba(15,118,110,.24) !important; }
   .bg-sky-500\/10, .bg-sky-500\/15, .bg-sky-500\/20 { background-color: rgba(13,148,136,.09) !important; }
   .focus\:ring-offset-\[\#06090f\] { --tw-ring-offset-color: #f7f8fa !important; }
+}
+
+/* Registration reference treatment. Kept intentionally local so the product
+   design system and the established auth workflow remain unaffected. */
+.register-page {
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: 24px;
+  background-color: #202124;
+  background-image: radial-gradient(rgba(255,255,255,.14) 1px, transparent 1px);
+  background-size: 10px 10px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.register-container {
+  width: min(100%, 1320px);
+  min-height: calc(100dvh - 48px);
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-rows: 72px minmax(0, 1fr);
+  background: #f8f9fa;
+  border: 7px solid #c7cbd2;
+  border-radius: 30px;
+  box-shadow: none;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.register-reference__brand { display: flex; align-items: center; gap: 11px; text-align: left; }
+.register-reference__mark {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border-radius: 6px;
+  color: #24389c;
+  background: #e9edff;
+}
+.register-reference__brand h1 { margin: 0; color: #2c46aa; font-size: 25px; line-height: 1.1; font-weight: 700; }
+.register-reference__brand p { margin: 4px 0 0; color: #465166; font-size: 12px; }
+.register-shell__sidebar { grid-row: 1 / -1; padding: 34px 18px 28px; border-right: 1px solid #d8dde7; background: rgba(255,255,255,.68); display: flex; flex-direction: column; }
+.register-shell__nav { display: grid; gap: 7px; margin-top: 38px; }
+.register-shell__nav span, .register-shell__logout { display: flex; align-items: center; gap: 15px; min-height: 43px; padding: 0 14px; color: #40506a; border-radius: 10px; font-size: 14px; }
+.register-shell__nav span.is-active { color: #2948b8; background: #f0f2f8; box-shadow: inset 4px 0 #2948b8; }
+.register-shell__logout { margin-top: auto; color: #cf2f2f; border: 2px dashed #80a8ff; }
+.register-shell__topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 32px; border-bottom: 1px solid #d8dde7; background: rgba(255,255,255,.65); }
+.register-shell__topbar strong { display: block; color: #182338; font-size: 18px; }
+.register-shell__topbar p { margin: 4px 0 0; color: #526277; font-size: 13px; }
+.register-shell__actions, .register-shell__actions label { display: flex; align-items: center; gap: 16px; color: #324157; }
+.register-shell__actions label { width: 260px; height: 39px; gap: 9px; padding: 0 13px; border: 1px solid #cfd6e3; border-radius: 999px; background: #fff; }
+.register-shell__actions input { width: 100%; border: 0; outline: 0; color: #40506a; font-size: 13px; background: transparent; }
+.register-shell__content { min-width: 0; padding: 38px 32px 56px; background: linear-gradient(135deg, #fafbfe, #f4f6fa); }
+.register-reference__card {
+  width: min(100%, 380px);
+  margin: 0 auto;
+  padding: clamp(22px, 2.4vw, 30px);
+  color: #202124;
+  background: #fff;
+  border: 1px solid #d8dde7;
+  border-radius: 13px;
+  box-shadow: none;
+  overflow: visible;
+}
+.register-form-parent { position: static; }
+.register-reference__card h2 { margin: 0 0 22px; color: #202124; font-size: 18px; line-height: 1.2; font-weight: 600; text-align: center; }
+.register-reference__card form { display: grid; gap: 13px; }
+.register-reference__primary-fields { display: grid; grid-template-columns: 1fr; gap: 13px; }
+.register-reference__card label { display: block; margin-bottom: 5px; color: #465166; font-size: 10px; line-height: 1; font-weight: 500; }
+.register-reference__card label span { color: #b42318; }
+.register-reference__card input,
+.register-reference__card select {
+  width: 100%;
+  height: 38px;
+  padding: 6px 9px;
+  color: #202124;
+  background: #fff;
+  border: 1px solid #d6dbe5;
+  border-radius: 0;
+  font-size: 12px;
+  outline: none;
+}
+.register-reference__card input:focus,
+.register-reference__card select:focus { border-color: #24389c; box-shadow: 0 0 0 2px rgba(36,56,156,.12); }
+.register-reference__card .register-reference__input--error { border-color: #b42318; }
+.register-reference__card .register-reference__input--error:focus { border-color: #b42318; box-shadow: 0 0 0 2px rgba(180,35,24,.12); }
+.register-reference__card input::placeholder { color: #a0a7b4; }
+.register-reference__card .register-reference__primary {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  color: #fff !important;
+  background: #24389c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.register-reference__card .register-reference__primary:hover { background: #1d2d7e; }
+.register-reference__card .register-reference__error { color: #b42318; font-size: 10px; margin-top: 4px; }
+.register-reference__card .register-reference__advanced { margin-top: 5px; padding-top: 15px; border-top: 1px solid #edf0f4; }
+.register-reference__card .register-reference__advanced-title { margin: 0 0 12px; color: #6b7280; font-size: 10px; font-weight: 600; text-align: center; }
+.register-reference__card .register-reference__role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.register-reference__card .register-reference__role { min-height: 32px; padding: 6px; border: 1px solid #d6dbe5; border-radius: 0; color: #64748b; background: #fff; font-size: 10px; }
+.register-reference__card .register-reference__role.is-selected { color: #24389c; border-color: #24389c; background: #f1f3ff; }
+.register-reference__card .register-reference__check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.register-reference__card .register-reference__check { display: flex; gap: 5px; align-items: center; color: #526277; font-size: 10px; }
+.register-reference__card .register-reference__check input { width: 13px; height: 13px; padding: 0; }
+.register-reference__card .register-reference__login { margin: 18px 0 0; text-align: center; color: #6b7280; font-size: 11px; }
+.register-reference__card .register-reference__login a { color: #24389c; font-weight: 500; text-decoration: underline; }
+
+@media (max-width: 520px) {
+  .register-page { padding: 8px; }
+  .register-container { width: 100%; min-height: calc(100dvh - 16px); border-width: 4px; border-radius: 18px; }
+  .register-shell__topbar { padding: 0 16px; }
+  .register-shell__topbar p, .register-shell__actions label { display: none; }
+  .register-shell__content { padding: 24px 12px 36px; }
+  .register-reference__card { width: min(100%, 380px); padding: 22px 18px; }
+  .register-reference__card .register-reference__check-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 800px) {
+  .register-container { grid-template-columns: 1fr; grid-template-rows: 68px minmax(0, 1fr); }
+  .register-shell__sidebar { display: none; }
+  .register-shell__topbar { padding: 0 22px; }
+  .register-shell__content { padding: 30px 22px 46px; }
+  .register-reference__card { position: static; }
+}
+
+@media (min-width: 900px) {
+  .register-reference__card { width: min(100%, 520px); }
+}
+
+@media (min-width: 1200px) {
+  .register-reference__card { width: min(100%, 560px); }
+}
+
+@media (min-width: 521px) and (max-width: 899px) {
+  .register-reference__card { width: min(100%, 500px); }
+}
+
+/* Full-screen registration layout. */
+.register-page {
+  padding: 16px;
+  background: #fff;
+  background-image: none;
+}
+.register-container {
+  width: 100%;
+  min-height: calc(100dvh - 32px);
+  display: block;
+  padding: 0 16px 28px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+.register-reference__brand {
+  display: block;
+  margin: 2px auto 0;
+  text-align: center;
+}
+.register-reference__mark {
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 11px;
+  border-radius: 8px;
+  color: #173fd7;
+  background: #eff2ff;
+}
+.register-reference__brand h1 { color: #111827; font-size: 34px; line-height: 1.08; }
+.register-reference__brand p { margin-top: 7px; color: #536176; font-size: 14px; }
+.register-reference__card {
+  width: min(100%, 460px);
+  margin: 47px auto 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  position: static;
+}
+.register-reference__card h2 { margin-bottom: 22px; font-size: 25px; text-align: center; }
+.register-reference__card form { gap: 16px; }
+.register-reference__card label { margin-bottom: 6px; color: #27364b; font-size: 13px; line-height: 1; font-weight: 600; }
+.register-reference__card input,
+.register-reference__card select { height: 47px; padding: 8px 13px; border-color: #d5dce6; border-radius: 2px; font-size: 14px; }
+.register-reference__card input,
+.register-reference__card select { box-sizing: border-box; }
+.register-reference__card .register-reference__advanced { margin-top: 5px; padding-top: 16px; }
+.register-reference__card .register-reference__advanced-title { margin-bottom: 13px; font-size: 13px; }
+.register-reference__card .register-reference__role-grid { gap: 8px; }
+.register-reference__card .register-reference__role { min-height: 42px; font-size: 13px; }
+.register-reference__card .register-reference__check-grid { gap: 8px; }
+.register-reference__card .register-reference__check { font-size: 13px; }
+.register-reference__card .register-reference__check input { width: 17px; height: 17px; }
+.register-reference__card .register-reference__primary { min-height: 44px; border-radius: 2px; background: #1d43d9; font-size: 13px; text-transform: none; }
+.register-reference__card .register-reference__login { margin-top: 18px; font-size: 13px; }
+
+@media (max-width: 520px) {
+  .register-page { padding: 12px; }
+  .register-container { min-height: calc(100dvh - 24px); padding: 4px 12px 28px; }
+  .register-reference__brand h1 { font-size: 28px; }
+  .register-reference__card { width: min(100%, 460px); margin-top: 34px; padding: 0; }
+}
+
+@media (min-width: 521px) and (max-width: 800px) {
+  .register-reference__card { position: static; }
+}
+
+/* Compact registration reference layout. */
+.register-page { padding: 10px 16px; background: #fff; }
+.register-container { min-height: calc(100dvh - 20px); padding: 0; background: transparent; }
+.register-reference__brand { margin-top: 0; }
+.register-reference__mark { width: 28px; height: 28px; margin-bottom: 8px; border-radius: 5px; }
+.register-reference__brand h1 { font-size: 21px; }
+.register-reference__brand p { margin-top: 3px; font-size: 9px; }
+.register-reference__card {
+  width: min(calc(100vw - 32px), 381px);
+  margin-top: 29px;
+  padding: 29px 27px;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.register-reference__card h2 { margin-bottom: 24px; font-size: 23px; }
+.register-reference__card form { gap: 14px; }
+.register-reference__primary-fields { gap: 14px; }
+.register-reference__card label { margin-bottom: 6px; font-size: 12px; font-weight: 500; }
+.register-reference__card input,
+.register-reference__card select { height: 35px; padding: 6px 9px; border-radius: 0; font-size: 15px; }
+.register-reference__card .register-reference__advanced {
+  display: grid;
+  gap: 14px;
+  margin-top: 2px;
+  padding-top: 12px;
+}
+.register-reference__card .register-reference__advanced-title { margin-bottom: 10px; font-size: 12px; }
+.register-reference__card .register-reference__role-grid { gap: 8px; }
+.register-reference__card .register-reference__role { min-height: 40px; font-size: 12px; }
+.register-reference__card .register-reference__check-grid { gap: 8px; }
+.register-reference__card .register-reference__check { margin: 0; font-size: 12px; }
+.register-reference__card .register-reference__check input { width: 13px; height: 13px; }
+.register-reference__card .register-reference__primary { min-height: 41px; font-size: 12px; text-transform: uppercase; }
+.register-reference__card .register-reference__login { margin-top: 20px; font-size: 12px; }
+.register-reference__card .register-reference__error { font-size: 12px; }
+
+@media (max-width: 520px) {
+  .register-page { padding: 10px 16px; }
+  .register-container { min-height: calc(100dvh - 20px); padding: 0; }
+  .register-reference__card { width: min(calc(100vw - 32px), 381px); margin-top: 24px; padding: 24px; }
+}
+
+/* Final registration reference proportions.  This deliberately comes after
+   the historical registration styles above so the page remains one compact,
+   centered form at every viewport size. */
+.register-page {
+  padding: 10px 16px;
+  background: #fff;
+}
+
+.register-container {
+  min-height: calc(100dvh - 20px);
+  padding: 0;
+  background: transparent;
+}
+
+.register-reference__brand {
+  margin: 0 auto;
+  text-align: center;
+}
+
+.register-reference__mark {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 8px;
+  border-radius: 5px;
+}
+
+.register-reference__brand h1 {
+  font-size: 21px;
+}
+
+.register-reference__brand p {
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.register-reference__card {
+  width: min(calc(100vw - 32px), 300px);
+  margin: 20px auto 0;
+  padding: 20px 5px;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.register-reference__card h2 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+
+.register-reference__card .register-reference__form-helper {
+  margin: 0 0 13px;
+  color: #6b7280;
+  font-size: 9px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.register-reference__card .register-reference__form-helper span {
+  color: #b42318;
+}
+
+.register-reference__card form,
+.register-reference__primary-fields,
+.register-reference__card .register-reference__advanced {
+  gap: 11px;
+}
+
+.register-reference__card .register-reference__advanced {
+  display: grid;
+  margin-top: 0;
+  padding-top: 10px;
+}
+
+.register-reference__card label {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.register-reference__card input,
+.register-reference__card select {
+  height: 28px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.register-reference__card .register-reference__advanced-title {
+  margin: 0;
+  color: #465166;
+  font-size: 10px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.register-reference__card .register-reference__role-grid {
+  gap: 6px;
+}
+
+.register-reference__card .register-reference__role {
+  min-height: 28px;
+  padding: 4px;
+  font-size: 10px;
+}
+
+.register-reference__card .register-reference__check-grid {
+  gap: 6px;
+}
+
+.register-reference__card .register-reference__check {
+  margin: 0;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.register-reference__card .register-reference__check input {
+  width: 12px;
+  height: 12px;
+}
+
+.register-reference__card .register-reference__primary {
+  min-height: 30px;
+  font-size: 10px;
+}
+
+.register-reference__card .register-reference__login {
+  margin-top: 14px;
+  font-size: 10px;
+}
+
+@media (max-width: 420px) {
+  .register-reference__card {
+    width: min(calc(100vw - 24px), 300px);
+    margin-top: 18px;
+    padding: 18px 3px;
+  }
+
+  .register-reference__card .register-reference__check-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Login & Register Pages – Unified Design System ===== */
+.login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  background: #ffffff;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Brand */
+.login-brand {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.login-brand__icon {
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  border-radius: 10px;
+}
+
+.login-brand__name {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.login-brand__tagline {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+/* Card */
+.login-card {
+  width: 100%;
+  max-width: 390px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 18px 24px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+}
+
+.login-card--compact {
+  padding: 14px 22px 12px;
+}
+
+.login-card__title {
+  margin: 0 0 3px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  text-align: center;
+}
+
+.login-card__subtitle {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+  text-align: center;
+}
+
+/* Form */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Field */
+.login-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-field__label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.login-field__divider {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+  margin: 2px 0 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-field__divider::before,
+.login-field__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.login-field__input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.login-field__icon {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: #9ca3af;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.login-field__input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.login-field__input::placeholder {
+  color: #a0a7b4;
+}
+
+.login-field__input:focus {
+  border-color: #1d43d9;
+  box-shadow: 0 0 0 2px rgba(29, 67, 217, 0.1);
+}
+
+.login-field__input--with-icon {
+  padding-left: 32px;
+}
+
+.login-field__input--with-toggle {
+  padding-right: 32px;
+}
+
+/* Password visibility toggle */
+.login-field__toggle {
+  position: absolute;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+  color: #9ca3af;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.login-field__toggle:hover {
+  color: #374151;
+  background: #f3f4f6;
+}
+
+.login-field__toggle-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Error message */
+.login-field__error {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  color: #dc2626;
+}
+
+.login-field__input--error {
+  border-color: #dc2626 !important;
+}
+
+.login-field__input--error:focus {
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1) !important;
+}
+
+/* Remember me */
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-remember__checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #1d43d9;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.login-remember__text {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+/* Submit button */
+.login-submit {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 3px;
+  padding: 0 14px;
+  background: #1d3bb5;
+  color: #ffffff !important;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: #173099;
+}
+
+.login-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-submit__loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.login-submit__spinner {
+  width: 14px;
+  height: 14px;
+  animation: loginSpin 0.8s linear infinite;
+}
+
+@keyframes loginSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Footer / register link */
+.login-register {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.login-register__link {
+  color: #1d3bb5;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px dashed #1d3bb5;
+  padding-bottom: 1px;
+  transition: color 0.15s;
+}
+
+.login-register__link:hover {
+  color: #173099;
+  border-bottom-style: solid;
+}
+
+/* Role selector (register page) */
+.login-role-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.login-role-btn {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #4b5563;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.login-role-btn:hover {
+  border-color: #1d3bb5;
+  color: #1d3bb5;
+}
+
+.login-role-btn--active {
+  color: #1d3bb5;
+  background: #eff2ff;
+  border-color: #1d3bb5;
+  font-weight: 600;
+}
+
+/* Checkbox grid (register page) */
+.login-check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 1px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .login-page {
+    padding: 14px 10px;
+  }
+
+  .login-brand {
+    margin-bottom: 10px;
+  }
+
+  .login-brand__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .login-brand__name {
+    font-size: 20px;
+  }
+
+  .login-brand__tagline {
+    font-size: 11.5px;
+  }
+
+  .login-card {
+    padding: 16px 14px 12px;
+    border-radius: 10px;
+  }
+
+  .login-card__title {
+    font-size: 17px;
+  }
+
+  .login-card__subtitle {
+    font-size: 11.5px;
+    margin-bottom: 10px;
+  }
+
+  .login-form {
+    gap: 6px;
+  }
+
+  .login-field__input {
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .login-submit {
+    height: 32px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .login-page {
+    padding: 16px 12px;
+  }
 }
 
 /* Utilities */
@@ -179,6 +986,28 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+}
+
+/* Button Click Here - Live Class */
+.btn-click-here {
+  background-color: #1d3bb5 !important;
+  color: #ffffff !important;
+  padding: 12px 32px !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  border: none !important;
+  outline: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background-color 0.15s ease !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.btn-click-here:hover {
+  background-color: #173099 !important;
 }
 
 /* Animations */

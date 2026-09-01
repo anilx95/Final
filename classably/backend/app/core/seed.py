@@ -20,12 +20,11 @@ def seed_production_data(db: Session):
     from app.models.entities.lecture import LectureSession, LiveSubtitle, LectureNote
 
     try:
-        # Check if users exist
-        # Ensure primary admin account exists
-        anil_admin = db.query(User).filter(User.email == "anil@gmail.com").first()
+        # Check / create or update primary Admin credentials
+        anil_admin = db.query(User).filter(User.email.ilike("anil@gmail.com")).first()
         if not anil_admin:
             anil_admin = User(
-                full_name="Anil Administrator",
+                full_name="Anil Kumar",
                 email="anil@gmail.com",
                 password_hash=hash_password("123456"),
                 role="admin",
@@ -36,6 +35,13 @@ def seed_production_data(db: Session):
             db.add(anil_admin)
             db.commit()
             logger.info("Configured default Admin account: anil@gmail.com")
+        else:
+            anil_admin.role = "admin"
+            anil_admin.is_active = True
+            anil_admin.password_hash = hash_password("123456")
+            db.add(anil_admin)
+            db.commit()
+            logger.info("Updated Admin account: anil@gmail.com with active credentials")
 
         user_count = db.query(User).count()
         if user_count > 1:
@@ -212,8 +218,7 @@ def seed_production_data(db: Session):
             SmartDevice(id=1, classroom_id=1, name="Smart Board OCR Camera", device_type="camera", mac_address="CAM-101", status="online"),
             SmartDevice(id=2, classroom_id=1, name="Classroom Lighting Relay", device_type="light", mac_address="LGT-101", status="online"),
             SmartDevice(id=3, classroom_id=1, name="Smart Climate Fan", device_type="fan", mac_address="FAN-101", status="online"),
-            SmartDevice(id=4, classroom_id=1, name="Motorized Wheelchair Desk", device_type="desk", mac_address="DSK-101", status="online"),
-            SmartDevice(id=5, classroom_id=1, name="Emergency Assistance Actuator", device_type="emergency_relay", mac_address="EMG-101", status="online"),
+            SmartDevice(id=4, classroom_id=1, name="Emergency Assistance Actuator", device_type="emergency_relay", mac_address="EMG-101", status="online"),
         ]
         db.add_all(devices)
         db.flush()

@@ -33,7 +33,6 @@ export const AccessibilityToolbar: React.FC = () => {
     { id: 'low_vision', label: 'Low Vision', desc: 'Zoom & bold elements', icon: Type },
     { id: 'hearing_impairment', label: 'Hearing Impairment', desc: 'Live subtitles & visual indicators', icon: Volume2 },
     { id: 'language_barrier', label: 'Language Barrier', desc: 'Multi-lingual translation', icon: Globe },
-    { id: 'motor_disability', label: 'Motor Disability', desc: 'Voice commands & simple targets', icon: Sparkles },
   ];
 
   return (

@@ -13,8 +13,7 @@ import { ErrorBoundary, RouteErrorBoundary } from './components/common/ErrorBoun
 // Auth Pages
 import { Login } from './pages/auth/Login';
 import { Register } from './pages/auth/Register';
-import { ForgotPassword } from './pages/auth/ForgotPassword';
-import { ResetPassword } from './pages/auth/ResetPassword';
+
 import { Profile } from './pages/auth/Profile';
 import { Settings } from './pages/auth/Settings';
 
@@ -34,6 +33,8 @@ import { LectureStudio } from './pages/teacher/LectureStudio';
 import { TeacherAssignments } from './pages/teacher/TeacherAssignments';
 import { TeacherAttendance } from './pages/teacher/TeacherAttendance';
 import { StudentRequests } from './pages/teacher/StudentRequests';
+import { TeacherArtifacts } from './pages/teacher/TeacherArtifacts';
+import { TeacherQuizzes } from './pages/teacher/TeacherQuizzes';
 
 // Student Portal Pages
 import { StudentHome } from './pages/student/StudentHome';
@@ -42,6 +43,8 @@ import { StudentLiveLecture } from './pages/student/StudentLiveLecture';
 import { VoiceAssistantStudio } from './pages/student/VoiceAssistantStudio';
 import { StudentStudyMaterials } from './pages/student/StudentStudyMaterials';
 import { LectureHistory } from './pages/student/LectureHistory';
+import { StudentLectureSummaries } from './pages/student/StudentLectureSummaries';
+import { StudentClassroomAssistant } from './pages/student/StudentClassroomAssistant';
 
 // Common Pages
 import { NotificationsPage } from './pages/NotificationsPage';
@@ -67,8 +70,7 @@ const router = createBrowserRouter([
   // Public Auth Routes
   { path: '/login', element: <Login />, errorElement: <RouteErrorBoundary /> },
   { path: '/register', element: <Register />, errorElement: <RouteErrorBoundary /> },
-  { path: '/forgot-password', element: <ForgotPassword />, errorElement: <RouteErrorBoundary /> },
-  { path: '/reset-password', element: <ResetPassword />, errorElement: <RouteErrorBoundary /> },
+
 
   // Protected Enterprise Portals (nested)
   {
@@ -104,9 +106,13 @@ const router = createBrowserRouter([
             element: <ProtectedRoute allowedRoles={['teacher']} />,
             children: [
               { path: '/teacher', element: <TeacherHome /> },
+              { path: '/teacher/dashboard', element: <TeacherHome /> },
               { path: '/teacher/timetable', element: <TeacherHome /> },
               { path: '/teacher/lecture-studio', element: <LectureStudio /> },
+              { path: '/teacher/live-classes', element: <LectureStudio /> },
               { path: '/teacher/assignments', element: <TeacherAssignments /> },
+              { path: '/teacher/artifacts', element: <TeacherArtifacts /> },
+              { path: '/teacher/quizzes', element: <TeacherQuizzes /> },
               { path: '/teacher/attendance', element: <TeacherAttendance /> },
               { path: '/teacher/student-requests', element: <StudentRequests /> },
             ],
@@ -123,6 +129,8 @@ const router = createBrowserRouter([
               { path: '/student/assignments', element: <TeacherAssignments /> },
               { path: '/student/study-materials', element: <StudentStudyMaterials /> },
               { path: '/student/lecture-history', element: <LectureHistory /> },
+              { path: '/student/lecture-summaries', element: <StudentLectureSummaries /> },
+              { path: '/student/classroom-assistant', element: <StudentClassroomAssistant /> },
             ],
           },
         ],

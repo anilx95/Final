@@ -7,13 +7,11 @@ export const AppLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col selection:bg-teal-100 selection:text-teal-950">
-
-      <Navbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-      
-      <div className="flex-1 flex">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden transition-all">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+        <Navbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+        <main className="flex-1 p-4 sm:p-7 max-w-[1400px] w-full min-w-0 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

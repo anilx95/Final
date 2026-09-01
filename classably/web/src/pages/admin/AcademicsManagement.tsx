@@ -88,26 +88,26 @@ export const AcademicsManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-slate-800">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
-            <Building2 className="w-5 h-5 text-sky-400" /> Academic & Campus Infrastructure
+          <h1 className="text-xl sm:text-2xl font-black text-[#0f172a] flex items-center gap-2.5 tracking-tight">
+            <Building2 className="w-5 h-5 text-[#1d43d9]" /> Academic & Campus Infrastructure
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Configure departments, degree programs, subjects, smart buildings, and classrooms</p>
+          <p className="text-xs text-slate-500 mt-1">Configure departments, degree programs, subjects, smart buildings, and classrooms</p>
         </div>
 
-        <Button
+        <button
+          type="button"
           onClick={() => {
             setFormData({});
             setIsModalOpen(true);
           }}
-          variant="primary"
-          size="sm"
-          leftIcon={<Plus className="w-4 h-4" />}
+          className="px-4 py-2 bg-[#1d43d9] hover:bg-[#1534b0] text-white text-xs sm:text-sm font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
         >
-          Add New {activeTab.slice(0, -1).toUpperCase()}
-        </Button>
+          <Plus className="w-4 h-4" />
+          <span>Add New {activeTab.slice(0, -1).toUpperCase()}</span>
+        </button>
       </div>
 
       {/* Tabs Bar */}
@@ -133,101 +133,101 @@ export const AcademicsManagement: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeTab === 'departments' &&
             departments.map((d) => (
-              <Card key={d.id} variant="default" className="p-5 space-y-2.5">
+              <div key={d.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <Badge variant="brand" size="sm">
                     {d.code}
                   </Badge>
-                  <span className="text-[11px] text-slate-400 font-mono">{d.total_courses || 0} Courses</span>
+                  <span className="text-[11px] text-slate-500 font-mono">{d.total_courses || 0} Courses</span>
                 </div>
-                <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{d.name}</h3>
-                <p className="text-xs text-slate-400">{d.description || 'Department of University Studies'}</p>
-                <div className="text-[11px] text-slate-300 pt-2 border-t border-[#1b2538]">
-                  Head of Dept: <strong className="text-slate-100">{d.head_of_department || 'Dr. Professor'}</strong>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">{d.name}</h3>
+                <p className="text-xs text-slate-500">{d.description || 'Department of University Studies'}</p>
+                <div className="text-[11px] text-slate-600 pt-2 border-t border-slate-100">
+                  Head of Dept: <strong className="text-slate-900">{d.head_of_department || 'Dr. Professor'}</strong>
                 </div>
-              </Card>
+              </div>
             ))}
 
           {activeTab === 'courses' &&
             courses.map((c) => (
-              <Card key={c.id} variant="default" className="p-5 space-y-2.5">
+              <div key={c.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <Badge variant="ai" size="sm">
                     {c.code}
                   </Badge>
-                  <span className="text-[11px] text-slate-400 font-mono">{c.duration_years} Years</span>
+                  <span className="text-[11px] text-slate-500 font-mono">{c.duration_years} Years</span>
                 </div>
-                <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{c.name}</h3>
-                <p className="text-xs text-slate-400">{c.department_name || 'Academic Major'}</p>
-              </Card>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">{c.name}</h3>
+                <p className="text-xs text-slate-500">{c.department_name || 'Academic Major'}</p>
+              </div>
             ))}
 
           {activeTab === 'years' &&
             years.map((y) => (
-              <Card key={y.id} variant="default" className="p-5 space-y-2.5">
+              <div key={y.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-slate-100 tracking-tight">{y.year_label}</span>
+                  <span className="text-sm font-bold text-slate-900 tracking-tight">{y.year_label}</span>
                   {y.is_current && (
                     <Badge variant="success" size="sm">
                       Active Term
                     </Badge>
                   )}
                 </div>
-                <div className="text-xs text-slate-400 space-y-1 pt-2 font-mono text-[11px]">
+                <div className="text-xs text-slate-500 space-y-1 pt-2 font-mono text-[11px]">
                   <div>Start: {new Date(y.start_date).toLocaleDateString()}</div>
                   <div>End: {new Date(y.end_date).toLocaleDateString()}</div>
                 </div>
-              </Card>
+              </div>
             ))}
 
           {activeTab === 'subjects' &&
             subjects.map((s) => (
-              <Card key={s.id} variant="default" className="p-5 space-y-2.5">
+              <div key={s.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <Badge variant="ai" size="sm">
                     {s.code}
                   </Badge>
-                  <span className="text-[11px] text-slate-400 font-mono">{s.credits} Credits</span>
+                  <span className="text-[11px] text-slate-500 font-mono">{s.credits} Credits</span>
                 </div>
-                <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{s.name}</h3>
-                <p className="text-xs text-slate-400">{s.description || 'Core subject module'}</p>
-              </Card>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">{s.name}</h3>
+                <p className="text-xs text-slate-500">{s.description || 'Core subject module'}</p>
+              </div>
             ))}
 
           {activeTab === 'buildings' &&
             buildings.map((b) => (
-              <Card key={b.id} variant="default" className="p-5 space-y-2.5">
+              <div key={b.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <Badge variant="brand" size="sm">
                     {b.code}
                   </Badge>
-                  <span className="text-[11px] text-slate-400 font-mono">{b.total_floors} Floors</span>
+                  <span className="text-[11px] text-slate-500 font-mono">{b.total_floors} Floors</span>
                 </div>
-                <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{b.name}</h3>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">{b.name}</h3>
                 <div className="flex items-center gap-1.5 pt-2 text-[10px]">
                   {b.has_elevator && <Badge variant="neutral" size="sm">Elevators</Badge>}
                   {b.has_wheelchair_ramps && <Badge variant="success" size="sm">Wheelchair Ramps</Badge>}
                 </div>
-              </Card>
+              </div>
             ))}
 
           {activeTab === 'classrooms' &&
             classrooms.map((cl) => (
-              <Card key={cl.id} variant="default" className="p-5 space-y-2.5">
+              <div key={cl.id} className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <Badge variant="brand" size="sm">
                     {cl.code || `CR-${cl.id}`}
                   </Badge>
-                  <span className="text-[11px] text-slate-400 font-mono">Capacity: {cl.capacity || 60}</span>
+                  <span className="text-[11px] text-slate-500 font-mono">Capacity: {cl.capacity || 60}</span>
                 </div>
-                <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{cl.name}</h3>
-                <p className="text-xs text-slate-400">{cl.building || 'Main Block'} - Floor {cl.floor || 1}</p>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">{cl.name}</h3>
+                <p className="text-xs text-slate-500">{cl.building || 'Main Block'} - Floor {cl.floor || 1}</p>
                 <div className="flex flex-wrap gap-1 pt-2 text-[10px]">
                   {cl.has_smart_board && <Badge variant="brand" size="sm">Smart Board</Badge>}
                   {cl.has_audio_system && <Badge variant="ai" size="sm">Assistive Audio</Badge>}
                   {cl.has_wheelchair_ramp && <Badge variant="success" size="sm">Ramp Access</Badge>}
                 </div>
-              </Card>
+              </div>
             ))}
         </div>
       )}
@@ -242,51 +242,51 @@ export const AcademicsManagement: React.FC = () => {
         >
           <form onSubmit={handleCreateSubmit} className="space-y-3.5 pt-2">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Code / Identifier</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Code / Identifier</label>
               <input
                 type="text"
                 required
                 placeholder="e.g. CS-101"
                 value={formData.code || ''}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                className="input-field text-xs"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1d43d9]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Name / Title</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Name / Title</label>
               <input
                 type="text"
                 required
                 placeholder="Name"
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="input-field text-xs"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1d43d9]"
               />
             </div>
 
             {activeTab === 'departments' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Head of Department</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Head of Department</label>
                 <input
                   type="text"
                   placeholder="Dr. Smith"
                   value={formData.head_of_department || ''}
                   onChange={(e) => setFormData({ ...formData, head_of_department: e.target.value })}
-                  className="input-field text-xs"
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1d43d9]"
                 />
               </div>
             )}
 
             {activeTab === 'courses' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Department ID</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Department ID</label>
                 <input
                   type="number"
                   required
                   value={formData.department_id || 1}
                   onChange={(e) => setFormData({ ...formData, department_id: Number(e.target.value) })}
-                  className="input-field text-xs"
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1d43d9]"
                 />
               </div>
             )}
@@ -294,42 +294,40 @@ export const AcademicsManagement: React.FC = () => {
             {activeTab === 'years' && (
               <>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Start Date</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Start Date</label>
                   <input
                     type="date"
                     required
                     onChange={(e) => setFormData({ ...formData, start_date: e.target.value, year_label: formData.name || '2026-2027' })}
-                    className="input-field text-xs"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1d43d9]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">End Date</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">End Date</label>
                   <input
                     type="date"
                     required
                     onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    className="input-field text-xs"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#1d43d9]"
                   />
                 </div>
               </>
             )}
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-[#1b2538]">
-              <Button
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
                 type="button"
-                variant="secondary"
-                size="sm"
+                className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                 onClick={() => setIsModalOpen(false)}
               >
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
-                variant="primary"
-                size="sm"
+                className="px-4 py-2 bg-[#1d43d9] hover:bg-[#1534b0] text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
               >
                 Submit & Create
-              </Button>
+              </button>
             </div>
           </form>
         </Modal>

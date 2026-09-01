@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 class RegisterRequest(BaseModel):
     full_name: str
     email: str
-    password: str
+    password: Optional[str] = None
     role: str = "student"  # admin, teacher, student
     college_name: Optional[str] = None
     phone: Optional[str] = None

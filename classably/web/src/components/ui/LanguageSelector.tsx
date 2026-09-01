@@ -7,7 +7,7 @@ export interface LanguageSelectorProps {
   onLanguageChange: (langCode: string) => void;
   className?: string;
   size?: 'sm' | 'md';
-  variant?: 'surface' | 'ghost' | 'overlay';
+  variant?: 'surface' | 'ghost' | 'overlay' | 'light';
 }
 
 export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
@@ -65,6 +65,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
     surface: 'bg-[#0d131f] hover:bg-[#121a2a] border border-[#1b2538] hover:border-[#25334c] text-slate-200 shadow-sm',
     ghost: 'bg-transparent hover:bg-slate-800/60 text-slate-300 border border-slate-800/80',
     overlay: 'bg-black/80 hover:bg-black backdrop-blur-md border border-white/20 text-white shadow-xl',
+    light: 'bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 shadow-2xs font-semibold',
   };
 
   return (

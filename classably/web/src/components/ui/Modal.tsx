@@ -53,33 +53,33 @@ export const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 animate-fade-in">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-md transition-opacity"
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal Card */}
       <div
-        className={`relative w-full ${maxWidthClasses[chosenSize]} max-w-[calc(100vw-1.5rem)] bg-[#0d131f] border border-[#1b2538] rounded-2xl shadow-2xl p-4 sm:p-6 overflow-hidden z-10 animate-slide-up max-h-[92vh] flex flex-col ${className}`}
+        className={`relative w-full ${maxWidthClasses[chosenSize]} max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-2xl p-5 sm:p-6 overflow-hidden z-10 animate-slide-up max-h-[92vh] flex flex-col ${className}`}
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
         {(title || description) && (
-          <div className="flex items-start justify-between pb-4 border-b border-[#1b2538] mb-4 shrink-0">
+          <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 mb-4 shrink-0">
             <div>
               {typeof title === 'string' ? (
-                <h3 className="text-base font-bold text-slate-100 tracking-tight">{title}</h3>
+                <h3 className="text-base font-bold text-[#111827] tracking-tight">{title}</h3>
               ) : (
                 title
               )}
               {description && (
-                <p className="text-xs text-slate-400 mt-1">{description}</p>
+                <p className="text-xs text-slate-500 mt-1">{description}</p>
               )}
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               aria-label="Close"
             >
               <X className="w-4 h-4" />

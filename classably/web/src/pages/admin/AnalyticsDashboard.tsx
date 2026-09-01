@@ -25,12 +25,12 @@ export const AnalyticsDashboard: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-slate-800">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
-          <BarChart3 className="w-5 h-5 text-sky-400" /> Real-Time Analytics Dashboard
+        <h1 className="text-xl sm:text-2xl font-black text-[#0f172a] flex items-center gap-2.5 tracking-tight">
+          <BarChart3 className="w-5 h-5 text-[#1d43d9]" /> Real-Time Analytics Dashboard
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Live AI Vision telemetry, voice command processing stats, and camera metrics</p>
+        <p className="text-xs text-slate-500 mt-1">Live AI Vision telemetry, voice command processing stats, and camera metrics</p>
       </div>
 
       {loading ? (
@@ -40,49 +40,49 @@ export const AnalyticsDashboard: React.FC = () => {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card variant="default" className="p-4">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
               <div className="text-[10px] uppercase font-bold text-slate-400 font-mono">Camera Status</div>
-              <div className="text-lg sm:text-xl font-bold text-emerald-400 mt-1 flex items-center gap-2">
+              <div className="text-lg sm:text-xl font-bold text-emerald-600 mt-1 flex items-center gap-2">
                 <Camera className="w-4 h-4" /> {analytics?.cameraStatus || 'Online'}
               </div>
-            </Card>
+            </div>
 
-            <Card variant="default" className="p-4">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
               <div className="text-[10px] uppercase font-bold text-slate-400 font-mono">OCR Accuracy</div>
-              <div className="text-lg sm:text-xl font-bold text-sky-400 mt-1 flex items-center gap-2">
+              <div className="text-lg sm:text-xl font-bold text-[#1d43d9] mt-1 flex items-center gap-2">
                 <Sparkles className="w-4 h-4" /> {analytics?.ocrAccuracy || '92%'}
               </div>
-            </Card>
+            </div>
 
-            <Card variant="default" className="p-4">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
               <div className="text-[10px] uppercase font-bold text-slate-400 font-mono">Voice Commands Today</div>
-              <div className="text-lg sm:text-xl font-bold text-indigo-400 mt-1 flex items-center gap-2">
+              <div className="text-lg sm:text-xl font-bold text-indigo-600 mt-1 flex items-center gap-2">
                 <Mic className="w-4 h-4" /> {analytics?.voiceCommands || 8}
               </div>
-            </Card>
+            </div>
 
-            <Card variant="default" className="p-4">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
               <div className="text-[10px] uppercase font-bold text-slate-400 font-mono">Server Uptime</div>
-              <div className="text-lg sm:text-xl font-bold text-amber-400 mt-1 flex items-center gap-2">
+              <div className="text-lg sm:text-xl font-bold text-amber-600 mt-1 flex items-center gap-2">
                 <Clock className="w-4 h-4" /> {analytics?.uptime || '4h 12m'}
               </div>
-            </Card>
+            </div>
           </div>
 
-          <Card variant="default" className="p-5 sm:p-6">
-            <h3 className="font-bold text-slate-100 text-sm mb-4 tracking-tight">AI Telemetry Metrics Comparison</h3>
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs">
+            <h3 className="font-bold text-slate-900 text-sm mb-4 tracking-tight">AI Telemetry Metrics Comparison</h3>
             <div className="h-64 sm:h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1b2538" opacity={0.6} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.8} />
                   <XAxis dataKey="metric" stroke="#64748b" fontSize={11} />
                   <YAxis stroke="#64748b" fontSize={11} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0d131f', borderColor: '#1b2538', borderRadius: '10px', fontSize: '12px', color: '#f8fafc' }} />
-                  <Bar dataKey="value" fill="#0284c7" radius={[6, 6, 0, 0]} />
+                  <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '10px', fontSize: '12px', color: '#0f172a', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Bar dataKey="value" fill="#1d43d9" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </Card>
+          </div>
         </>
       )}
     </div>

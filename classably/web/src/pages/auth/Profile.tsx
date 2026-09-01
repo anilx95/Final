@@ -54,26 +54,29 @@ export const Profile: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-5xl animate-fade-in">
+      {/* Page Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2 tracking-tight">
-          <UserIcon className="w-5 h-5 text-sky-400" /> User Profile & Settings
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight">
+          User Profile & Settings
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Manage your account details and adaptive accessibility preferences</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Manage your account details and adaptive accessibility preferences
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Profile Card Summary */}
         <Card variant="default" className="text-center flex flex-col items-center justify-center p-6 space-y-3">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-sky-600 to-indigo-600 border-2 border-sky-400/50 flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-sky-500/20">
+          <div className="w-16 h-16 rounded-full bg-[#eef4ff] border-2 border-[#dbeafe] flex items-center justify-center text-[#1d3bb5] font-black text-2xl shadow-sm">
             {user?.full_name?.charAt(0) || 'U'}
           </div>
           <div>
-            <h3 className="font-bold text-slate-100 text-base sm:text-lg tracking-tight">{user?.full_name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{user?.email}</p>
+            <h3 className="font-bold text-[#111827] text-base sm:text-lg tracking-tight">{user?.full_name}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{user?.email}</p>
           </div>
 
-          <Badge variant={user?.role === 'teacher' ? 'brand' : user?.role === 'admin' ? 'ai' : 'success'} size="md">
+          <Badge variant={user?.role === 'teacher' ? 'brand' : user?.role === 'admin' ? 'ai' : 'brand'} size="md">
             {user?.role?.toUpperCase()} ACCOUNT
           </Badge>
         </Card>
@@ -82,81 +85,80 @@ export const Profile: React.FC = () => {
         <div className="md:col-span-2">
           <Card variant="default" className="p-6">
             <form onSubmit={handleSave} className="space-y-4">
-              <h3 className="font-bold text-slate-100 text-sm border-b border-[#1b2538] pb-3 flex items-center gap-2 tracking-tight">
-                <UserIcon className="w-4 h-4 text-sky-400" /> General Details
+              <h3 className="font-bold text-[#111827] text-base border-b border-slate-100 pb-3 flex items-center gap-2 tracking-tight">
+                <UserIcon className="w-4 h-4 text-[#1d3bb5]" /> General Details
               </h3>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Full Name</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Full Name</label>
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="input-field text-xs"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Email (Read Only)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email (Read Only)</label>
                   <input
                     type="email"
                     disabled
                     value={user?.email || ''}
-                    className="input-field text-xs opacity-60 bg-[#080c14] cursor-not-allowed"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs text-slate-500 cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Phone Number</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Phone Number</label>
                   <input
                     type="text"
                     placeholder="+1 555-0199"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="input-field text-xs"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
                   />
                 </div>
               </div>
 
               {user?.role === 'student' && (
-                <div className="pt-4 border-t border-[#1b2538] space-y-3">
-                  <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
-                    <Sparkles className="w-4 h-4 text-sky-400" /> Disability Profile & Preferences
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <h3 className="font-bold text-[#111827] text-base flex items-center gap-2 tracking-tight">
+                    <Sparkles className="w-4 h-4 text-[#1d3bb5]" /> Disability Profile & Preferences
                   </h3>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-2">Selected Accommodations</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">Selected Accommodations</label>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       {[
                         { id: 'visual_impairment', label: 'Visual Impairment' },
                         { id: 'hearing_impairment', label: 'Hearing Impairment' },
                         { id: 'language_barrier', label: 'Language Barrier' },
-                        { id: 'motor_disability', label: 'Motor Disability' },
                       ].map((d) => (
                         <button
                           type="button"
                           key={d.id}
                           onClick={() => handleDisabilityToggle(d.id)}
-                          className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all duration-150 ${
+                          className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all duration-150 cursor-pointer ${
                             disabilityProfiles.includes(d.id)
-                              ? 'bg-sky-500/10 border-sky-500/50 text-sky-300 font-semibold'
-                              : 'bg-[#080c14] border-[#1b2538] text-slate-400 hover:border-slate-700'
+                              ? 'bg-[#eff4ff] border-[#dbeafe] text-[#1d3bb5] font-bold'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                           }`}
                         >
                           <span>{d.label}</span>
-                          {disabilityProfiles.includes(d.id) && <Check className="w-4 h-4 text-sky-400" />}
+                          {disabilityProfiles.includes(d.id) && <Check className="w-4 h-4 text-[#1d3bb5]" />}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Preferred Audio/Text Language</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Preferred Audio/Text Language</label>
                     <select
                       value={preferredLang}
                       onChange={(e) => setPreferredLang(e.target.value)}
-                      className="input-field text-xs bg-[#080c14] text-slate-200"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
                     >
                       <option value="en">English (US)</option>
                       <option value="es">Spanish (Español)</option>
@@ -190,3 +192,4 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
+

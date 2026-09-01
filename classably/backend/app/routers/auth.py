@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -276,16 +277,21 @@ def register(
             detail="Full name cannot be empty.",
         )
 
-    password_clean = request.password
-    if not password_clean or len(password_clean) < 6:
+    password_clean = request.password.strip() if request.password else None
+    if password_clean and len(password_clean) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 6 characters.",
         )
+    if not password_clean:
+        password_clean = secrets.token_urlsafe(32)
 
     college_name_clean = request.college_name.strip() if request.college_name else ""
     if not college_name_clean:
-        college_name_clean = "ClassAbly Institution"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Institution cannot be empty.",
+        )
 
     existing = get_user_by_email(db, email_clean)
     if existing:

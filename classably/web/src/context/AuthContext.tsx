@@ -9,7 +9,6 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<UserRole>;
   loginWithOtp: (email: string, otp: string) => Promise<UserRole>;
   register: (data: any) => Promise<UserRole>;
-  registerWithOtp: (data: any) => Promise<UserRole>;
   logout: () => void;
   updateUser: (updatedData: Partial<User>) => void;
 }
@@ -108,22 +107,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const registerWithOtp = async (data: any): Promise<UserRole> => {
-    setIsLoading(true);
-    try {
-      const response = await authApi.registerWithOtp(data);
-      const { access_token, user: registeredUser } = response.data;
-
-      localStorage.setItem('classably_token', access_token);
-      setToken(access_token);
-      setUser(registeredUser);
-
-      return registeredUser.role as UserRole;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const logout = useCallback(() => {
     localStorage.removeItem('classably_token');
     setToken(null);
@@ -143,7 +126,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         loginWithOtp,
         register,
-        registerWithOtp,
         logout,
         updateUser,
       }}

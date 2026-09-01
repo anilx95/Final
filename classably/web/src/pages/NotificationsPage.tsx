@@ -43,12 +43,15 @@ export const NotificationsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-5xl animate-fade-in">
+      {/* Page Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
-          <Bell className="w-5 h-5 text-sky-400" /> Notifications Inbox
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight">
+          Notifications Inbox
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Class schedule updates, OCR board scan alerts, and system notifications</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Class schedule updates, OCR board scan alerts, and system notifications
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -64,15 +67,17 @@ export const NotificationsPage: React.FC = () => {
           notifications.map((n) => (
             <Card
               key={n.id}
-              variant={!n.is_read ? 'ai' : 'default'}
-              className="p-4 flex items-start justify-between gap-4"
+              variant="default"
+              className={`p-5 sm:p-6 flex items-start justify-between gap-4 transition-all ${
+                !n.is_read ? 'border-[#dbeafe] bg-gradient-to-r from-white to-blue-50/20 shadow-sm' : ''
+              }`}
             >
               <div>
                 <div className="flex items-center gap-2">
-                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />}
-                  <h3 className="font-bold text-slate-100 text-sm tracking-tight">{n.title}</h3>
+                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-[#1d3bb5] shrink-0" />}
+                  <h3 className="font-bold text-[#111827] text-sm sm:text-base tracking-tight">{n.title}</h3>
                 </div>
-                <p className="text-xs text-slate-300 mt-1">{n.message}</p>
+                <p className="text-xs text-slate-600 mt-1">{n.message}</p>
                 <div className="text-[10px] text-slate-400 mt-2 font-mono">
                   {new Date(n.created_at).toLocaleString()}
                 </div>
@@ -83,7 +88,7 @@ export const NotificationsPage: React.FC = () => {
                   onClick={() => handleMarkRead(n.id)}
                   variant="secondary"
                   size="sm"
-                  leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                  leftIcon={<CheckCircle2 className="w-3.5 h-3.5 text-[#1d3bb5]" />}
                 >
                   Mark Read
                 </Button>
@@ -95,3 +100,4 @@ export const NotificationsPage: React.FC = () => {
     </div>
   );
 };
+

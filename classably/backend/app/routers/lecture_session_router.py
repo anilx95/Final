@@ -77,9 +77,16 @@ def start_session(
         teacher_id=teacher.id,
         subject=subject,
     )
+    session.subject = subject
     session.topic = topic
     db.commit()
     db.refresh(session)
+
+    def _format_iso(dt):
+        if not dt:
+            return None
+        iso = dt.isoformat()
+        return iso + "Z" if not iso.endswith("Z") and "+" not in iso else iso
 
     return {
         "success": True,
@@ -92,7 +99,7 @@ def start_session(
             "subject": session.subject,
             "topic": session.topic,
             "status": session.status,
-            "started_at": session.started_at,
+            "started_at": _format_iso(session.started_at),
         },
     }
 
@@ -106,6 +113,12 @@ def get_all_active_sessions(db: Session = Depends(get_db)):
         .all()
     )
     results = []
+    def _format_iso(dt):
+        if not dt:
+            return None
+        iso = dt.isoformat()
+        return iso + "Z" if not iso.endswith("Z") and "+" not in iso else iso
+
     for s in active_sessions:
         teacher_name = s.teacher.name if s.teacher else (s.teacher_name or "Faculty Educator")
         from app.models.entities.classroom import Classroom
@@ -121,7 +134,7 @@ def get_all_active_sessions(db: Session = Depends(get_db)):
             "subject": s.subject,
             "topic": getattr(s, "topic", "Live Lecture"),
             "status": s.status or "ACTIVE",
-            "started_at": s.started_at,
+            "started_at": _format_iso(s.started_at),
         })
     return {"success": True, "active_sessions": results}
 
@@ -159,6 +172,12 @@ def get_active_session(
         classroom_id=classroom_id,
     )
 
+    def _format_iso(dt):
+        if not dt:
+            return None
+        iso = dt.isoformat()
+        return iso + "Z" if not iso.endswith("Z") and "+" not in iso else iso
+
     if session is not None:
         teacher_name = session.teacher.name if session.teacher else "Teacher"
         return {
@@ -172,33 +191,7 @@ def get_active_session(
                 "subject": session.subject,
                 "topic": getattr(session, "topic", "Lecture"),
                 "status": session.status or "ACTIVE",
-                "started_at": session.started_at,
-            },
-        }
-
-    # If no ACTIVE session, look up recent ended session for downloads/recordings context
-    last_session = (
-        db.query(LectureSession)
-        .filter(LectureSession.classroom_id == classroom_id)
-        .order_by(LectureSession.started_at.desc())
-        .first()
-    )
-
-    if last_session:
-        teacher_name = last_session.teacher.name if last_session.teacher else "Teacher"
-        return {
-            "success": True,
-            "is_active": False,
-            "session": {
-                "id": last_session.id,
-                "classroom_id": last_session.classroom_id,
-                "teacher_id": last_session.teacher_id,
-                "teacher_name": teacher_name,
-                "subject": last_session.subject,
-                "topic": getattr(last_session, "topic", "Lecture"),
-                "status": last_session.status or "ENDED",
-                "started_at": last_session.started_at,
-                "ended_at": last_session.ended_at,
+                "started_at": _format_iso(session.started_at),
             },
         }
 

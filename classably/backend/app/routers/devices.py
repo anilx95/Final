@@ -20,7 +20,6 @@ def seed_devices(classroom_id: int, db: Session = Depends(get_db)):
             ("fan", "Ceiling Fan & Ventilation", {"on": True, "speed": 2}, "online"),
             ("curtain", "Smart Window Blinds", {"open": True}, "online"),
             ("projector", "Smart Board Projector", {"on": True, "slide": 1}, "online"),
-            ("desk", "Adaptive Wheelchair Desk", {"height_cm": 75}, "online"),
             ("door", "Automated Door & Ramp Lock", {"locked": False}, "online"),
             ("emergency", "Emergency SOS Button", {"active": False}, "online"),
         ]

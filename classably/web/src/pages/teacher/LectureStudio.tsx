@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Video,
   Mic,
+  MicOff,
   Camera,
+  CameraOff,
   Play,
   Square,
   Sparkles,
@@ -17,7 +20,19 @@ import {
   BookOpen,
   Volume2,
   UserX,
-  Users
+  Users,
+  Share2,
+  PenTool,
+  LayoutGrid,
+  PhoneOff,
+  Search,
+  MessageSquare,
+  Bell,
+  User,
+  ChevronDown,
+  ChevronUp,
+  Radio,
+  Clock
 } from 'lucide-react';
 import { lectureApi, ocrApi, exportApi, cameraApi } from '../../api/client';
 import { LiveSubtitle, RaiseHandItem, QuizQuestion } from '../../types';
@@ -39,17 +54,27 @@ const globalSessionStartTimes: Map<number, number> = new Map();
 export const LectureStudio: React.FC = () => {
   const { addToast } = useToast();
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locationState = location.state as {
+    sessionId?: number;
+    subject?: string;
+    topic?: string;
+    teacherName?: string;
+    autoStart?: boolean;
+  } | null;
 
   // Lecture Session State
-  const [sessionId, setSessionId] = useState<number | null>(null);
-  const sessionIdRef = useRef<number | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(() => locationState?.sessionId || null);
+  const sessionIdRef = useRef<number | null>(locationState?.sessionId || null);
   const [lastCompletedSessionId, setLastCompletedSessionId] = useState<number | null>(null);
-  const [isSessionActive, setIsSessionActive] = useState(false);
-  const [subject, setSubject] = useState('');
-  const [topic, setTopic] = useState('');
+  const [isSessionActive, setIsSessionActive] = useState<boolean>(() => !!(locationState?.sessionId && locationState?.autoStart));
+  const [subject, setSubject] = useState(() => locationState?.subject || '');
+  const [topic, setTopic] = useState(() => locationState?.topic || '');
 
   // Media Stream & Hardware State
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const activeHardwareStreamsRef = useRef<Set<MediaStream>>(new Set());
   const [cameraActive, setCameraActive] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [micLevel, setMicLevel] = useState<number>(0);
@@ -111,6 +136,7 @@ export const LectureStudio: React.FC = () => {
 
   // Raised Hand Queue & AI Quizzes & Connected Students
   const [raiseHandQueue, setRaiseHandQueue] = useState<RaiseHandItem[]>([]);
+  const [qaSearchQuery, setQaSearchQuery] = useState('');
   const [quizzes, setQuizzes] = useState<QuizQuestion[]>([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [connectedStudents, setConnectedStudents] = useState<any[]>([]);
@@ -576,12 +602,30 @@ export const LectureStudio: React.FC = () => {
       recordingTimerRef.current = null;
     }
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch {}
+    if (mediaRecorderRef.current) {
+      try {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+        if (mediaRecorderRef.current.stream) {
+          mediaRecorderRef.current.stream.getTracks().forEach((t) => {
+            try { t.enabled = false; t.stop(); } catch {}
+          });
+        }
+      } catch {}
       mediaRecorderRef.current = null;
     }
-    if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
-      try { audioRecorderRef.current.stop(); } catch {}
+    if (audioRecorderRef.current) {
+      try {
+        if (audioRecorderRef.current.state !== 'inactive') {
+          audioRecorderRef.current.stop();
+        }
+        if (audioRecorderRef.current.stream) {
+          audioRecorderRef.current.stream.getTracks().forEach((t) => {
+            try { t.enabled = false; t.stop(); } catch {}
+          });
+        }
+      } catch {}
       audioRecorderRef.current = null;
     }
 
@@ -795,15 +839,7 @@ export const LectureStudio: React.FC = () => {
         const peerId = message.peer_id || message.student_id || 'default_student';
 
         if (message.type === 'join' || message.type === 'request_offer') {
-          const now = Date.now();
-          const lastTime = lastNegotiationTimeRef.current.get(peerId) || 0;
-          const existingPc = peerConnectionsRef.current.get(peerId);
-          if (existingPc && (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting') && (now - lastTime < 3000)) {
-            console.log('[Teacher] Skipping redundant offer negotiation for active peer:', peerId);
-            return;
-          }
-          lastNegotiationTimeRef.current.set(peerId, now);
-          console.log('[Teacher] Student joined room, creating new offer for peer:', peerId);
+          console.log('[Teacher] Student joined room / requested offer for peer:', peerId);
           const activeStream = stream || localStreamRef.current;
           if (activeStream) {
             await createPeerConnectionForStudent(peerId, activeStream);
@@ -864,6 +900,180 @@ export const LectureStudio: React.FC = () => {
     });
   };
 
+  // Camera Error Diagnostic Helper
+  const handleCameraError = (err: any) => {
+    console.warn('[Teacher Camera Error]', err);
+    const errorName = err?.name || '';
+    const errorMsg = err?.message || '';
+
+    if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError') {
+      addToast({
+        type: 'warning',
+        title: 'Camera Permission Needed',
+        description: 'Webcam permission was blocked. Click the lock or camera icon in your browser address bar and set Camera to "Allow", then toggle Camera ON.',
+      });
+    } else if (errorName === 'NotFoundError' || errorName === 'DevicesNotFoundError') {
+      addToast({
+        type: 'warning',
+        title: 'No Webcam Detected',
+        description: 'No physical webcam or video capture device was found on this system.',
+      });
+    } else if (errorName === 'NotReadableError' || errorName === 'TrackStartError') {
+      addToast({
+        type: 'warning',
+        title: 'Webcam In Use',
+        description: 'Your webcam is being used by another application (Zoom, Teams, or another tab). Please close it and retry.',
+      });
+    } else if (errorName === 'OverconstrainedError' || errorName === 'ConstraintNotSatisfiedError') {
+      addToast({
+        type: 'warning',
+        title: 'Camera Constraint Error',
+        description: 'The requested camera resolution is not supported by your device.',
+      });
+    } else {
+      addToast({
+        type: 'warning',
+        title: 'Camera Notice',
+        description: errorMsg || 'Could not connect to webcam. Please verify camera permissions in your browser.',
+      });
+    }
+  };
+
+  // Reusable helper to acquire a real webcam video track
+  const acquireWebcamTrack = async (): Promise<MediaStreamTrack | null> => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      addToast({
+        type: 'error',
+        title: 'Browser Unsupported',
+        description: 'Your browser does not support webcam mediaDevices. Please use Chrome or Edge.',
+      });
+      return null;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+      });
+      activeHardwareStreamsRef.current.add(stream);
+      return stream.getVideoTracks()[0] || null;
+    } catch (err: any) {
+      if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          activeHardwareStreamsRef.current.add(fallbackStream);
+          return fallbackStream.getVideoTracks()[0] || null;
+        } catch (fbErr) {
+          handleCameraError(fbErr);
+          return null;
+        }
+      } else {
+        handleCameraError(err);
+        return null;
+      }
+    }
+  };
+
+  const toggleCamera = async () => {
+    // 1. If currently Camera Active -> User wants to turn Camera OFF
+    if (cameraActive) {
+      if (localStreamRef.current) {
+        const videoTracks = localStreamRef.current.getVideoTracks();
+        videoTracks.forEach((track) => {
+          track.enabled = false;
+        });
+      }
+      setCameraActive(false);
+      addToast({
+        type: 'info',
+        title: 'Camera Paused',
+        description: 'Live video transmission paused.',
+      });
+      return;
+    }
+
+    // 2. Currently Camera Inactive -> User wants to turn Camera ON / RESUME
+    // Check if we already have an existing live video track in localStreamRef
+    let liveTrack: MediaStreamTrack | null = null;
+    if (localStreamRef.current) {
+      const tracks = localStreamRef.current.getVideoTracks();
+      liveTrack = tracks.find((t) => t.readyState === 'live') || null;
+    }
+
+    if (liveTrack) {
+      // Re-enable existing live track
+      liveTrack.enabled = true;
+      if (videoRef.current) {
+        if (videoRef.current.srcObject !== localStreamRef.current) {
+          videoRef.current.srcObject = localStreamRef.current;
+          videoRef.current.muted = true;
+        }
+        videoRef.current.play().catch(() => {});
+      }
+      setCameraActive(true);
+      addToast({
+        type: 'success',
+        title: 'Camera Resumed',
+        description: 'Live camera video stream active.',
+      });
+      return;
+    }
+
+    // 3. No live track exists -> acquire fresh webcam track
+    const newTrack = await acquireWebcamTrack();
+    if (!newTrack) return;
+
+    newTrack.enabled = true;
+
+    if (!localStreamRef.current) {
+      localStreamRef.current = new MediaStream();
+    }
+
+    // Remove any ended/dead video tracks
+    localStreamRef.current.getVideoTracks().forEach((oldTrack) => {
+      localStreamRef.current!.removeTrack(oldTrack);
+      try { oldTrack.stop(); } catch {}
+    });
+
+    localStreamRef.current.addTrack(newTrack);
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = localStreamRef.current;
+      videoRef.current.muted = true;
+      videoRef.current.play().catch(() => {});
+    }
+
+    // Sync WebRTC peer connections with new video track
+    peerConnectionsRef.current.forEach((pc) => {
+      const senders = pc.getSenders();
+      const vSender = senders.find((s) => s.track && s.track.kind === 'video');
+      if (vSender) {
+        vSender.replaceTrack(newTrack).catch(() => {});
+      } else {
+        try {
+          pc.addTrack(newTrack, localStreamRef.current!);
+        } catch {}
+      }
+    });
+
+    setCameraActive(true);
+    addToast({
+      type: 'success',
+      title: 'Camera Enabled',
+      description: 'Live video stream online.',
+    });
+  };
+
+  // Synchronize localStream with video element whenever video element mounts or cameraActive state is active
+  useEffect(() => {
+    if (isSessionActive && cameraActive && videoRef.current && localStreamRef.current) {
+      if (videoRef.current.srcObject !== localStreamRef.current) {
+        videoRef.current.srcObject = localStreamRef.current;
+        videoRef.current.muted = true;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isSessionActive, cameraActive]);
+
   const startMicLevelMeter = (stream: MediaStream) => {
     try {
       const audioTracks = stream.getAudioTracks();
@@ -913,103 +1123,6 @@ export const LectureStudio: React.FC = () => {
       audioContextRef.current = null;
     }
     setMicLevel(0);
-  };
-
-  const createSyntheticClassroomStream = (): MediaStream => {
-    console.log('[Teacher] Creating synthetic live classroom video & audio stream fallback...');
-    const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
-    const ctx = canvas.getContext('2d')!;
-
-    let frameCount = 0;
-    const drawFrame = () => {
-      frameCount++;
-      const grad = ctx.createLinearGradient(0, 0, 1280, 720);
-      grad.addColorStop(0, '#0f172a');
-      grad.addColorStop(1, '#1e1b4b');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 1280, 720);
-
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < 1280; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, 720);
-        ctx.stroke();
-      }
-      for (let y = 0; y < 720; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(1280, y);
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 36px Inter, sans-serif';
-      ctx.fillText('ClassAbly Smart Lecture Studio', 80, 100);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '24px Inter, sans-serif';
-      ctx.fillText('Topic: Artificial Intelligence & Live Classroom Stream', 80, 150);
-
-      ctx.beginPath();
-      ctx.strokeStyle = '#818cf8';
-      ctx.lineWidth = 4;
-      for (let x = 80; x < 1200; x += 10) {
-        const y = 360 + Math.sin((x + frameCount * 5) * 0.02) * 40;
-        if (x === 80) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-
-      ctx.fillStyle = '#22c55e';
-      ctx.beginPath();
-      ctx.arc(80, 620, 10 + Math.sin(frameCount * 0.1) * 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 22px Inter, sans-serif';
-      ctx.fillText(`LIVE STREAMING • Frame #${frameCount}`, 105, 627);
-
-      requestAnimationFrame(drawFrame);
-    };
-
-    drawFrame();
-
-    const canvasStream = canvas.captureStream(30);
-
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        const actx = new AudioCtx();
-        if (actx.state === 'suspended') {
-          actx.resume().catch(() => {});
-        }
-        const dest = actx.createMediaStreamDestination();
-        const osc = actx.createOscillator();
-        const gain = actx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(440, actx.currentTime);
-        // Inaudible keepalive signal — only ensures WebRTC audio packets flow,
-        // does NOT produce audible beep for students
-        gain.gain.setValueAtTime(0.001, actx.currentTime);
-        osc.connect(gain);
-        gain.connect(dest);
-        osc.start();
-
-        const synthAudioTrack = dest.stream.getAudioTracks()[0];
-        if (synthAudioTrack) {
-          console.log('[Teacher] Silent keepalive audio track created & attached:', synthAudioTrack.id);
-          canvasStream.addTrack(synthAudioTrack);
-        }
-      }
-    } catch (e) {
-      console.warn('[Teacher] Could not create synth audio track:', e);
-    }
-
-    return canvasStream;
   };
 
   const createAudioStreamMixer = (micStream: MediaStream | null): MediaStreamTrack | null => {
@@ -1062,181 +1175,286 @@ export const LectureStudio: React.FC = () => {
     }
   };
 
-  // Initialize Web Cam Media Stream with resilient mobile/desktop fallback chain
+  // Initialize Web Cam Media Stream with real hardware camera & audio (independent capture for max compatibility)
   const startMediaDevices = async (activeSessionId?: number) => {
     try {
       const currentSessionId = activeSessionId || sessionIdRef.current || 1;
-      console.log('[Teacher] Requesting getUserMedia with video & enhanced audio constraints for session:', currentSessionId);
-      let rawStream: MediaStream | null = null;
+      console.log('[Teacher] Initializing media devices for session:', currentSessionId);
       
-      const constraintsList: MediaStreamConstraints[] = [
-        {
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        },
-        { video: true, audio: true },
-        { video: { facingMode: 'user' }, audio: true },
-        { video: true, audio: false },
-      ];
+      const masterStream = new MediaStream();
 
-      for (const constraints of constraintsList) {
-        try {
-          rawStream = await navigator.mediaDevices.getUserMedia(constraints);
-          if (rawStream && rawStream.getVideoTracks().length > 0) {
-            console.log('[Teacher] getUserMedia succeeded with constraints:', constraints);
-            break;
-          }
-        } catch (errConstraint) {
-          console.warn('[Teacher] getUserMedia attempt failed with:', constraints, errConstraint);
+      // 1. Acquire Camera Video Track
+      // Check if localStreamRef already contains an active live video track (reuse existing stream)
+      let existingVTrack: MediaStreamTrack | null = null;
+      if (localStreamRef.current) {
+        const vTracks = localStreamRef.current.getVideoTracks();
+        existingVTrack = vTracks.find((t) => t.readyState === 'live') || null;
+      }
+
+      if (existingVTrack) {
+        existingVTrack.enabled = true;
+        masterStream.addTrack(existingVTrack);
+        console.log('[Teacher] Reusing existing live camera video track:', existingVTrack.id);
+      } else {
+        const newVTrack = await acquireWebcamTrack();
+        if (newVTrack) {
+          newVTrack.enabled = true;
+          masterStream.addTrack(newVTrack);
+          console.log('[Teacher] Attached new camera video track:', newVTrack.id);
         }
       }
 
-      if (!rawStream) {
-        console.warn('[Teacher] All physical webcam attempts failed; falling back to canvas classroom stream.');
-        rawStream = createSyntheticClassroomStream();
-        addToast({
-          type: 'info',
-          title: 'Live Board Stream Active',
-          description: 'Webcam permission unavailable or denied. Broadcasting live Smart Board video stream.',
+      // 2. Acquire Microphone Audio Track (independent of video)
+      let rawAudioStream: MediaStream | null = null;
+      try {
+        rawAudioStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
         });
+        if (rawAudioStream) {
+          activeHardwareStreamsRef.current.add(rawAudioStream);
+        }
+        if (rawAudioStream && rawAudioStream.getAudioTracks().length > 0) {
+          const aTrack = rawAudioStream.getAudioTracks()[0];
+          aTrack.enabled = true;
+          masterStream.addTrack(aTrack);
+          console.log('[Teacher] Hardware mic track acquired:', aTrack.id);
+        }
+      } catch (micErr) {
+        try {
+          rawAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (rawAudioStream) {
+            activeHardwareStreamsRef.current.add(rawAudioStream);
+          }
+          if (rawAudioStream && rawAudioStream.getAudioTracks().length > 0) {
+            const aTrack = rawAudioStream.getAudioTracks()[0];
+            aTrack.enabled = true;
+            masterStream.addTrack(aTrack);
+          }
+        } catch (mFallbackErr) {
+          console.warn('[Teacher] Audio getUserMedia error:', mFallbackErr);
+        }
       }
 
-      // Build unified master stream with direct hardware mic track
-      const masterStream = new MediaStream();
-      const videoTrack = rawStream.getVideoTracks()[0];
-      if (videoTrack) {
-        masterStream.addTrack(videoTrack);
-      }
-
-      const rawAudioTrack = rawStream.getAudioTracks()[0];
-      if (rawAudioTrack) {
-        rawAudioTrack.enabled = true;
-        masterStream.addTrack(rawAudioTrack);
-        console.log('[Teacher] Direct hardware audio track attached to masterStream:', rawAudioTrack.id);
-      } else {
-        const mixedAudioTrack = createAudioStreamMixer(rawStream);
+      // Ensure audio track is present via keepalive mixer if direct mic was unavailable
+      if (masterStream.getAudioTracks().length === 0) {
+        const mixedAudioTrack = createAudioStreamMixer(rawAudioStream);
         if (mixedAudioTrack) {
           masterStream.addTrack(mixedAudioTrack);
-          console.log('[Teacher] Fallback synth audio track attached to masterStream:', mixedAudioTrack.id);
         }
       }
 
       localStreamRef.current = masterStream;
+
+      // Assign to video element if already mounted
       if (videoRef.current) {
         videoRef.current.srcObject = masterStream;
         videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
         videoRef.current.play().catch(() => {});
       }
 
-      const audioTracks = masterStream.getAudioTracks();
       const videoTracks = masterStream.getVideoTracks();
-      console.log(`[Teacher] getUserMedia success. Stream ID: ${masterStream.id}. Audio tracks: ${audioTracks.length}, Video tracks: ${videoTracks.length}`);
-      audioTracks.forEach((t, i) => {
-        console.log(`[Teacher] Audio Track #${i} -> id: ${t.id}, enabled: ${t.enabled}, state: ${t.readyState}, label: "${t.label}"`);
-      });
-      videoTracks.forEach((t, i) => {
-        console.log(`[Teacher] Video Track #${i} -> id: ${t.id}, enabled: ${t.enabled}, state: ${t.readyState}, label: "${t.label}"`);
-      });
+      const audioTracks = masterStream.getAudioTracks();
+      const hasLiveCam = videoTracks.length > 0 && videoTracks[0].readyState === 'live';
+      const hasLiveMic = audioTracks.length > 0 && audioTracks[0].readyState === 'live';
 
-      const isCamLive = videoTracks.length > 0 && (videoTracks[0].readyState === 'live' || videoTracks[0].enabled);
-      const isMicLive = audioTracks.length > 0 && (audioTracks[0].readyState === 'live' || audioTracks[0].enabled);
-
-      setCameraActive(isCamLive);
-      setMicActive(isMicLive);
-      console.log('[Teacher] Camera active:', isCamLive, '| Microphone active:', isMicLive);
+      setCameraActive(hasLiveCam);
+      setMicActive(hasLiveMic);
 
       startMicLevelMeter(masterStream);
       startRecording(masterStream, currentSessionId);
       initWebRTC(masterStream);
     } catch (err) {
-      console.warn('[Teacher] Webcam/Mic permission error or failure:', err);
+      console.warn('[Teacher] Media initialization error:', err);
+      setCameraActive(false);
     }
   };
 
   const stopMediaDevices = () => {
     stopMicLevelMeter();
     stopSpeechRecognition();
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch {}
+      mediaRecorderRef.current = null;
+    }
+    if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+      try { audioRecorderRef.current.stop(); } catch {}
+      audioRecorderRef.current = null;
+    }
+
     if (wsRef.current) {
-      wsRef.current.close();
+      try { wsRef.current.close(); } catch {}
       wsRef.current = null;
     }
+
     peerConnectionsRef.current.forEach((pc) => {
-      pc.close();
+      try {
+        pc.getSenders().forEach((sender) => {
+          if (sender.track) {
+            try {
+              sender.track.enabled = false;
+              sender.track.stop();
+            } catch {}
+          }
+        });
+        pc.close();
+      } catch {}
     });
     peerConnectionsRef.current.clear();
     pendingCandidatesRef.current.clear();
 
+    activeHardwareStreamsRef.current.forEach((stream) => {
+      try {
+        stream.getTracks().forEach((track) => {
+          try {
+            track.enabled = false;
+            track.stop();
+          } catch {}
+        });
+      } catch {}
+    });
+    activeHardwareStreamsRef.current.clear();
+
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.enabled = false;
+          track.stop();
+        } catch {}
+      });
       localStreamRef.current = null;
     }
+
     if (videoRef.current) {
+      if (videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (stream && stream.getTracks) {
+          stream.getTracks().forEach((t) => {
+            try {
+              t.enabled = false;
+              t.stop();
+            } catch {}
+          });
+        }
+      }
       videoRef.current.srcObject = null;
     }
+
     setCameraActive(false);
     setMicActive(false);
   };
 
-  // Check and resume active lecture session on component mount (e.g. after teacher navigates back from another page)
+  // Check and resume active lecture session on component mount (e.g. after teacher navigates back from another page or starts from dashboard)
   useEffect(() => {
     let isMounted = true;
     const checkAndResumeActiveSession = async () => {
-      try {
-        const res = await lectureApi.getActiveSession(1);
-        const data = res.data;
-        if (isMounted && data?.is_active && data.session?.id) {
-          const sess = data.session;
-          setSessionId(sess.id);
-          sessionIdRef.current = sess.id;
-          setSubject(sess.subject || '');
-          setTopic(sess.topic || '');
+      // 1. If navigated directly after Start Class from TeacherHome
+      if (locationState?.autoStart && locationState?.sessionId) {
+        const sid = locationState.sessionId;
+        if (isMounted) {
+          setSessionId(sid);
+          sessionIdRef.current = sid;
+          setSubject(locationState.subject || '');
+          setTopic(locationState.topic || '');
           setIsSessionActive(true);
           isSessionActiveRef.current = true;
           setLastCompletedSessionId(null);
 
-          if (sess.started_at) {
-            const startedMs = new Date(sess.started_at).getTime();
-            const elapsed = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
-            setRecordingSeconds(elapsed);
-          }
+          const activeLang = getSessionLanguage(sid, targetLang || 'en');
+          setTargetLang(activeLang);
+          setTeacherSpeechLang(activeLang);
+          prevTeacherSpeechLangRef.current = activeLang;
 
-          // Restore persisted language for this active class session
-          const restoredLang = getSessionLanguage(sess.id, 'en');
-          setTargetLang(restoredLang);
-          setTeacherSpeechLang(restoredLang);
-          prevTeacherSpeechLangRef.current = restoredLang;
-
-          // 1. Immediately reconnect WebSocket and start speech recognition with 0ms delay
           initWebRTC();
-          startSpeechRecognition(sess.id, restoredLang);
-
-          // 2. Fetch existing session subtitles to restore live transcript state immediately
-          lectureApi.getSubtitles(sess.id).then((subRes) => {
-            if (isMounted && Array.isArray(subRes.data)) {
-              setSubtitles(subRes.data.map((s: any) => ({
-                id: s.id,
-                speaker: s.speaker_name || s.speaker || user?.full_name || 'Educator',
-                text: s.original_text || s.text || '',
-                original_text: s.original_text || s.text || '',
-                translations: s.translations || {},
-                timestamp: s.created_at ? new Date(s.created_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
-              })));
-            }
-          }).catch(() => {});
-
-          // 3. Start media hardware in parallel without blocking subtitle stream
-          startMediaDevices(sess.id).catch((err) => {
-            console.warn('[Teacher] Resumed session media start warning:', err);
-          });
-
-          addToast({
-            type: 'info',
-            title: 'Resumed Active Lecture',
-            description: `Reconnected to live lecture session #${sess.id} (${sess.subject || 'Live Lecture'}).`,
+          startSpeechRecognition(sid, activeLang);
+          startMediaDevices(sid).catch((err) => {
+            console.warn('[Teacher] Media hardware start notice:', err);
           });
         }
+        return;
+      }
+
+      // 2. Otherwise query backend for any currently ACTIVE session
+      try {
+        const res = await lectureApi.getActiveSession(1);
+        const data = res.data;
+        if (isMounted) {
+          if (data?.is_active && data.session?.id && (data.session.status === 'ACTIVE' || data.session.status === 'active' || data.session.status === 'live')) {
+            const sess = data.session;
+            setSessionId(sess.id);
+            sessionIdRef.current = sess.id;
+            setSubject(sess.subject || '');
+            setTopic(sess.topic || '');
+            setIsSessionActive(true);
+            isSessionActiveRef.current = true;
+            setLastCompletedSessionId(null);
+
+            if (sess.started_at) {
+              const startedMs = new Date(sess.started_at).getTime();
+              const elapsed = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+              setRecordingSeconds(elapsed);
+            }
+
+            // Restore persisted language for this active class session
+            const restoredLang = getSessionLanguage(sess.id, 'en');
+            setTargetLang(restoredLang);
+            setTeacherSpeechLang(restoredLang);
+            prevTeacherSpeechLangRef.current = restoredLang;
+
+            // 1. First start media hardware and wait for camera & mic to be fully active
+            await startMediaDevices(sess.id);
+
+            // 2. Immediately reconnect WebSocket and start speech recognition with master stream
+            initWebRTC(localStreamRef.current || undefined);
+            startSpeechRecognition(sess.id, restoredLang);
+
+            // 3. Notify all connected students that teacher returned with live stream
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              try {
+                wsRef.current.send(JSON.stringify({
+                  type: 'teacher_online',
+                  classroom_id: 1,
+                  role: 'teacher',
+                  peer_id: 'teacher',
+                }));
+              } catch {}
+            }
+
+            // 4. Fetch existing session subtitles to restore live transcript state immediately
+            lectureApi.getSubtitles(sess.id).then((subRes) => {
+              if (isMounted && Array.isArray(subRes.data)) {
+                setSubtitles(subRes.data.map((s: any) => ({
+                  id: s.id,
+                  speaker: s.speaker_name || s.speaker || user?.full_name || 'Educator',
+                  text: s.original_text || s.text || '',
+                  original_text: s.original_text || s.text || '',
+                  translations: s.translations || {},
+                  timestamp: s.created_at ? new Date(s.created_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
+                })));
+              }
+            }).catch(() => {});
+
+            addToast({
+              type: 'info',
+              title: 'Active Lecture Connected',
+              description: `Live lecture session #${sess.id} (${sess.subject || 'Live Lecture'}).`,
+            });
+          } else {
+            // No active session -> show setup form
+            setIsSessionActive(false);
+            isSessionActiveRef.current = false;
+            setSessionId(null);
+            sessionIdRef.current = null;
+          }
+        }
       } catch (err) {
-        // No active session — normal state, teacher can start new lecture
+        if (isMounted) {
+          setIsSessionActive(false);
+          isSessionActiveRef.current = false;
+          setSessionId(null);
+          sessionIdRef.current = null;
+        }
       }
     };
 
@@ -1291,7 +1509,7 @@ export const LectureStudio: React.FC = () => {
         recordingTimerRef.current = null;
       }
     };
-  }, []);
+  }, [location.key, location.pathname]);
 
   // Start Lecture Session
   const handleStartLecture = async () => {
@@ -1350,6 +1568,20 @@ export const LectureStudio: React.FC = () => {
       startSpeechRecognition(newSession.id, targetLang);
       await startMediaDevices(newSession.id);
 
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({
+            type: 'lecture_started',
+            session_id: newSession.id,
+            subject,
+            topic,
+            teacher_name: user?.full_name || 'Ms. Sharma',
+            started_at: newSession.started_at || new Date().toISOString(),
+            classroom_id: 1,
+          }));
+        } catch {}
+      }
+
       addToast({
         type: 'success',
         title: 'Lecture Session Started',
@@ -1365,59 +1597,68 @@ export const LectureStudio: React.FC = () => {
   };
 
 
-  // End Lecture Session (Instant UI update + instant WebSocket & backend termination + non-blocking background upload)
+  // End Lecture Session (Awaits backend termination, stops recording, and redirects immediately to /teacher/dashboard)
   const handleEndLecture = async () => {
     if (!sessionId) return;
     const targetSessionId = sessionId;
 
-    // 1. Immediately broadcast lecture_ended event over WebSockets FIRST while socket is still open
     try {
+      // 1. Immediately broadcast lecture_ended event over WebSockets while socket is still open
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: 'lecture_ended',
-          session_id: targetSessionId,
-          classroom_id: 1,
-        }));
+        try {
+          wsRef.current.send(JSON.stringify({
+            type: 'lecture_ended',
+            session_id: targetSessionId,
+            classroom_id: 1,
+          }));
+        } catch (e) {
+          console.warn('[Teacher] WS lecture_ended notice:', e);
+        }
       }
-    } catch (e) {
-      console.warn('[Teacher] WS lecture_ended notice:', e);
-    }
 
-    // 2. Trigger backend end_session immediately (instant DB update & server-side WS broadcast)
-    lectureApi.endSession(targetSessionId).catch((e) => {
-      console.warn('[Teacher] Backend end_session notice:', e);
-    });
+      // 2. Shut off all hardware camera and microphone tracks FIRST
+      stopMediaDevices();
 
-    // 3. Immediately set state to inactive and stop local media devices for instant UI response
-    isSessionActiveRef.current = false;
-    setIsSessionActive(false);
-    setLastCompletedSessionId(targetSessionId);
-    setSessionId(null);
-    setSubtitles([]);
-    setRaiseHandQueue([]);
-    setConnectedStudents([]);
-    setOcrText(null);
-    stopMediaDevices();
+      // 3. Trigger backend end_session and await confirmation
+      await lectureApi.endSession(targetSessionId);
 
-    // Clear persisted session language and reset state for clean start of future classes
-    clearSessionLanguage(targetSessionId);
-    setTargetLang('en');
-    setTeacherSpeechLang('en');
+      // 4. Set state to inactive
+      isSessionActiveRef.current = false;
+      setIsSessionActive(false);
+      setLastCompletedSessionId(targetSessionId);
+      setSessionId(null);
+      setSubtitles([]);
+      setRaiseHandQueue([]);
+      setConnectedStudents([]);
+      setOcrText(null);
 
-    addToast({
-      type: 'success',
-      title: 'Lecture Session Ended',
-      description: `Session #${targetSessionId} completed. Recordings and AI notes saved for download below.`,
-    });
+      // Clear persisted session language and reset state for clean start of future classes
+      clearSessionLanguage(targetSessionId);
+      setTargetLang('en');
+      setTeacherSpeechLang('en');
 
-    // 4. Asynchronously upload recording non-blocking in the background
-    (async () => {
-      try {
-        await stopRecordingAndUpload(targetSessionId);
-      } catch (e) {
+      // 5. Asynchronously upload recording non-blocking in the background
+      stopRecordingAndUpload(targetSessionId).catch((e) => {
         console.warn('[Teacher] Recording upload notice:', e);
-      }
-    })();
+      });
+
+      addToast({
+        type: 'success',
+        title: 'Lecture Ended',
+        description: `Class session #${targetSessionId} completed successfully.`,
+      });
+
+      // 6. Automatically redirect teacher directly to /teacher/dashboard
+      navigate('/teacher/dashboard');
+    } catch (err: any) {
+      console.error('[Teacher] End session error:', err);
+      stopMediaDevices();
+      addToast({
+        type: 'error',
+        title: 'Failed to End Class',
+        description: err.response?.data?.detail || 'Could not end live lecture session. Please try again.',
+      });
+    }
   };
 
   const toggleSttRecognition = () => {
@@ -1611,539 +1852,597 @@ export const LectureStudio: React.FC = () => {
     }
   };
 
+  // Filtered Q&A questions by search query
+  const filteredQuestions = raiseHandQueue.filter((item) => {
+    if (!qaSearchQuery.trim()) return true;
+    const q = qaSearchQuery.toLowerCase();
+    return (
+      (item.student_name && item.student_name.toLowerCase().includes(q)) ||
+      (item.question_text && item.question_text.toLowerCase().includes(q))
+    );
+  });
+
+  const exportTargetSessionId = sessionId || lastCompletedSessionId;
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Studio Header Bar */}
-      <Card variant="default" className="p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${isSessionActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
-              <h1 className="text-lg sm:text-xl font-bold text-slate-100 tracking-tight">Smart Lecture Studio</h1>
-              {isSessionActive && (
-                <Badge variant="success" size="sm">
-                  Session #{sessionId} LIVE
-                </Badge>
-              )}
+    <div className="space-y-5 animate-fade-in pb-10">
+      {/* Top Header Bar when session is active */}
+      {isSessionActive && (
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-1 py-0.5">
+          {/* Class Subject & Topic + LIVE badge + Timer */}
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight truncate">
+              {subject || 'Advanced Data Structures'} {topic ? `– ${topic}` : '– Fall 2024'}
+            </h1>
+
+            {/* LIVE Badge */}
+            <div className="flex items-center gap-1.5 bg-red-100 text-red-600 font-semibold text-xs px-2.5 py-0.5 rounded-full border border-red-200/60 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+              <span>LIVE</span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Live Camera Feed, AI Board OCR, Real-Time STT Subtitles, & Raise Hand Queue</p>
-            {isSessionActive && (
-              <div className="mt-2 text-xs text-slate-300 flex items-center gap-2 flex-wrap">
-                <Badge variant="brand" size="sm">
-                  Subject: {subject}
-                </Badge>
-                <Badge variant="ai" size="sm">
-                  Topic: {topic}
-                </Badge>
-              </div>
-            )}
+
+            {/* Live Recording Timer */}
+            <span className="text-xs font-mono text-slate-500 font-medium ml-0.5">
+              {Math.floor(recordingSeconds / 3600).toString().padStart(2, '0')}:
+              {Math.floor((recordingSeconds % 3600) / 60).toString().padStart(2, '0')}:
+              {(recordingSeconds % 60).toString().padStart(2, '0')}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {isSessionActive && (
-              <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1 rounded-lg">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  REC {Math.floor(recordingSeconds / 3600).toString().padStart(2, '0')}:{Math.floor((recordingSeconds % 3600) / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
-                </span>
+          {/* Right Status Indicators: Students count, Language Selector, Notification Bell, User Avatar */}
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            {/* Real Connected Students Count */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+              <Users className="w-3.5 h-3.5 text-slate-500" />
+              <span>{(connectedStudents || []).length} {(connectedStudents || []).length === 1 ? 'Student' : 'Students'}</span>
+            </div>
 
-                {isSttActive && (
-                  <Badge variant="brand" size="sm">
-                    <Mic className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
-                    STT Active
-                  </Badge>
-                )}
-              </div>
-            )}
+            {/* 1. LANGUAGE SELECTOR (Compact Light Variant) */}
+            <LanguageSelector
+              selectedLanguage={targetLang}
+              onLanguageChange={handleLanguageChange}
+              size="sm"
+              variant="light"
+            />
 
-            {isSessionActive && (
-              <Button variant="danger" size="sm" onClick={handleEndLecture} leftIcon={<Square className="w-3.5 h-3.5" />}>
-                End Lecture & Save Notes
-              </Button>
-            )}
+            {/* Notification Bell with red indicator dot */}
+            <button
+              type="button"
+              className="relative p-1.5 text-slate-600 hover:text-slate-900 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+            </button>
+
+            {/* User Profile Avatar Icon */}
+            <div className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 text-xs font-bold bg-slate-50 shadow-2xs">
+              <User className="w-4 h-4 text-slate-600" />
+            </div>
           </div>
         </div>
-      </Card>
+      )}
 
-      {/* Class Session Setup Card (when inactive) */}
+      {/* Inactive State: Start Lecture Setup Card */}
       {!isSessionActive && (
-        <Card variant="ai" className="p-6 space-y-5">
-          <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 tracking-tight">
-                <BookOpen className="w-4 h-4 text-sky-400" /> Start New Lecture Session
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Enter the subject name and topic details. This will broadcast live to all connected students.
-              </p>
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-8 space-y-6">
+            <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1d3bb5] flex items-center justify-center">
+                    <Video className="w-4 h-4" />
+                  </div>
+                  Start Live Lecture Class
+                </h1>
+                <p className="text-xs text-slate-500 mt-1">
+                  Configure subject details to broadcast your live smart classroom stream to students.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                Stream Inactive
+              </span>
             </div>
-            <Badge variant="brand" size="sm">
-              Classroom #1
-            </Badge>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Subject Name Input */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-sky-400" /> Subject Name <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="e.g. Mathematics, Computer Networks, Physics..."
-                className="input-field text-xs"
-              />
-              {/* Quick Chips */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-[10px] text-slate-500 font-semibold">Quick:</span>
-                {['Mathematics', 'Computer Science', 'Physics', 'Artificial Intelligence', 'Data Structures'].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setSubject(s)}
-                    className="text-[10px] px-2 py-0.5 rounded bg-[#080c14] hover:bg-sky-500/15 text-slate-300 hover:text-sky-300 border border-[#1b2538] transition-all cursor-pointer"
-                  >
-                    {s}
-                  </button>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Subject Name Input */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-[#1d3bb5]" /> Subject Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g. Mathematics, Computer Science, Physics..."
+                  className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#1d3bb5] focus:bg-white text-slate-900 transition-colors"
+                />
+                {/* Quick Chips */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className="text-[11px] text-slate-400 font-semibold">Quick:</span>
+                  {['Mathematics', 'Computer Science', 'Physics', 'Artificial Intelligence', 'Data Structures'].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSubject(s)}
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-[#1d3bb5] border border-slate-200 hover:border-blue-200 transition-all font-medium cursor-pointer"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Subject Topic Input */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-purple-600" /> Subject Topic <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g. Matrix Transformations, TCP/IP Architecture..."
+                  className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#1d3bb5] focus:bg-white text-slate-900 transition-colors"
+                />
+                <p className="text-[11px] text-slate-500">Describe the specific chapter or topic being taught in today's session.</p>
               </div>
             </div>
 
-            {/* Subject Topic Input */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-purple-400" /> Subject Topic <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g. Matrix Transformations, TCP/IP Architecture..."
-                className="input-field text-xs"
-              />
-              <p className="text-[11px] text-slate-400">Describe the specific chapter or topic being taught today.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end pt-3 border-t border-[#1b2538]">
-            <Button
-              onClick={handleStartLecture}
-              disabled={!subject.trim() || !topic.trim()}
-              variant="primary"
-              size="md"
-              leftIcon={<Play className="w-4 h-4 fill-current" />}
-            >
-              Start Live Lecture
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* Main Studio Grid: Video Camera + OCR / Subtitles */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Live Camera Stream & OCR Board Scanner */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card variant="default" padding="none" className="overflow-hidden relative group bg-black">
-            {/* Camera Controls Overlay Header */}
-            <div className="absolute top-2 sm:top-3.5 left-2 sm:left-3.5 right-2 sm:right-3.5 z-20 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
-              <div className="flex items-center gap-1.5 pointer-events-auto bg-[#0d131f]/90 backdrop-blur-md px-2 py-1 rounded-lg border border-[#1b2538] text-xs">
-                <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="font-semibold text-slate-200 text-[10px] sm:text-[11px] hidden xs:inline">Camera:</span>
+            {/* Camera Source Selector */}
+            <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <Camera className="w-4 h-4 text-slate-500" />
+                <span className="font-semibold text-slate-700">Camera Source:</span>
                 <select
                   value={cameraSourceType}
                   onChange={(e) => setCameraSourceType(e.target.value as any)}
-                  className="bg-transparent text-sky-300 font-bold focus:outline-none cursor-pointer text-[10px] sm:text-[11px]"
+                  className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#1d3bb5] cursor-pointer"
                 >
-                  <option value="webcam" className="bg-[#0d131f] text-slate-100">Laptop Webcam</option>
-                  <option value="esp32" className="bg-[#0d131f] text-slate-100">ESP32 Cam Stream</option>
-                  <option value="ip_cam" className="bg-[#0d131f] text-slate-100">RTSP USB Camera</option>
+                  <option value="webcam">Integrated / USB Webcam</option>
+                  <option value="esp32">ESP32 Camera Stream</option>
+                  <option value="ip_cam">RTSP IP Camera</option>
                 </select>
               </div>
 
-              <div className="pointer-events-auto flex items-center gap-1.5">
-                {/* YouTube Style CC Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsCcEnabled(!isCcEnabled)}
-                  className={`px-2 sm:px-2.5 py-1 rounded-md text-xs font-black tracking-wider backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1 ${
-                    isCcEnabled
-                      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-md shadow-yellow-500/10 hover:bg-yellow-500/30'
-                      : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
-                  }`}
-                  title="Toggle Closed Captions (CC)"
-                >
-                  <span className="text-[11px] font-extrabold font-mono">CC</span>
-                  <span className="text-[9px] uppercase font-bold">{isCcEnabled ? 'ON' : 'OFF'}</span>
-                </button>
-
-                <span className={`text-[10px] font-bold px-1.5 sm:px-2 py-1 rounded-md backdrop-blur-md ${cameraActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
-                  {cameraActive ? 'ON' : 'OFF'}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={toggleMic}
-                  disabled={!isSessionActive}
-                  className={`flex items-center gap-1 backdrop-blur-md px-2 py-1 rounded-md border transition-all cursor-pointer ${
-                    micActive
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
-                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
-                  }`}
-                  title={micActive ? 'Click to Mute Microphone' : 'Click to Unmute Microphone'}
-                >
-                  <Mic className={`w-3.5 h-3.5 ${micActive ? 'text-emerald-400 animate-pulse' : 'text-rose-400'}`} />
-                  <div className="w-8 sm:w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-                    <div
-                      className={`h-full transition-all duration-75 ease-out ${micActive ? 'bg-emerald-400' : 'bg-rose-500'}`}
-                      style={{ width: `${micActive ? micLevel : 0}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-300 w-7 sm:w-8 text-right">
-                    {micActive ? `${micLevel}%` : 'MUTE'}
-                  </span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleStartLecture}
+                disabled={!subject.trim() || !topic.trim()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#1d3bb5] hover:bg-[#173099] font-bold text-xs text-white transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>Start Live Lecture</span>
+              </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* Video Viewport */}
-            <div className="h-64 sm:h-80 md:h-96 w-full relative flex items-center justify-center bg-black">
+      {/* Main Active Layout: Left Video & Controls (Col 8) + Right Q&A (Col 4) aligned vertically */}
+      {isSessionActive && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-stretch">
+          {/* Left Column: Live Video Area + Bottom Controls Bar */}
+          <div className="lg:col-span-8 flex flex-col gap-3.5 justify-between">
+            {/* Video Viewport Container (Slightly increased vertical height with aspect-[16/10]) */}
+            <div className="relative rounded-2xl bg-slate-950 overflow-hidden shadow-xs aspect-[16/10] w-full flex items-center justify-center border border-slate-200/80 shrink-0">
               <video
-                ref={videoRef}
+                ref={(el) => {
+                  videoRef.current = el;
+                  if (el && localStreamRef.current) {
+                    if (el.srcObject !== localStreamRef.current) {
+                      el.srcObject = localStreamRef.current;
+                      el.muted = true;
+                      el.playsInline = true;
+                    }
+                    if (cameraActive) {
+                      el.play().catch(() => {});
+                    }
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
-                className={`w-full h-full object-cover transition-opacity duration-300 ${cameraActive ? 'opacity-100 relative z-10' : 'opacity-0 absolute inset-0 pointer-events-none'}`}
+                onLoadedMetadata={(e) => {
+                  (e.target as HTMLVideoElement).play().catch(() => {});
+                }}
+                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                  cameraActive ? 'opacity-100 relative z-10' : 'opacity-0 absolute inset-0 pointer-events-none'
+                }`}
               />
 
-              {/* CC Subtitle Overlay */}
-              {isSessionActive && isCcEnabled && activeSubtitleText && (
-                <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-30 max-w-[92%] sm:max-w-[85%] w-auto pointer-events-none flex flex-col items-center gap-1 animate-fade-in">
-                  <div className="bg-black/90 backdrop-blur-md px-3 sm:px-4.5 py-1.5 sm:py-2 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2 transition-all duration-150">
-                    <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-yellow-400 text-black font-mono shrink-0">
-                      CC • {getLanguageByCode(targetLang)?.name?.toUpperCase() || targetLang.toUpperCase()}
-                    </span>
-                    <p className="text-yellow-300 sm:text-yellow-200 font-extrabold text-xs sm:text-sm text-center leading-snug tracking-wide drop-shadow-md">
-                      {activeSubtitleText}
+              {/* Overlay Top-Left: Teacher Name Pill with Live Green Dot */}
+              <div className="absolute top-3.5 left-3.5 z-20 pointer-events-none flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-medium text-white shadow-md">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{user?.full_name || 'Dr. Alan Turing'}</span>
+              </div>
+
+              {/* Overlay Top-Right: Camera Source Selector */}
+              <div className="absolute top-3.5 right-3.5 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs text-white shadow-md">
+                <Camera className="w-3.5 h-3.5 text-blue-400" />
+                <select
+                  value={cameraSourceType}
+                  onChange={(e) => setCameraSourceType(e.target.value as any)}
+                  className="bg-transparent text-white text-[11px] font-medium focus:outline-none cursor-pointer"
+                >
+                  <option value="webcam" className="bg-slate-900 text-white">Laptop Webcam</option>
+                  <option value="esp32" className="bg-slate-900 text-white">ESP32 Cam</option>
+                  <option value="ip_cam" className="bg-slate-900 text-white">RTSP IP Cam</option>
+                </select>
+              </div>
+
+              {/* Overlay Bottom-Center: Subtitle Box matching Reference Image */}
+              {isCcEnabled && activeSubtitleText && (
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 max-w-lg w-[90%] pointer-events-none flex flex-col items-center gap-1 animate-fade-in">
+                  <div className="bg-black/80 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-white/10 shadow-2xl text-center">
+                    <p className="text-white font-normal text-xs sm:text-sm leading-relaxed tracking-wide">
+                      “{activeSubtitleText}”
                     </p>
                   </div>
                 </div>
               )}
 
+              {/* Placeholder when Camera is disabled */}
               {!cameraActive && (
-                <div className="text-center space-y-2.5">
-                  <div className="w-14 h-14 rounded-2xl bg-[#080c14] border border-[#1b2538] flex items-center justify-center text-slate-500 mx-auto">
-                    <Video className="w-7 h-7" />
+                <div className="text-center space-y-2.5 p-6 z-10">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mx-auto shadow-inner">
+                    <CameraOff className="w-7 h-7 text-slate-500" />
                   </div>
-                  <p className="text-xs text-slate-400">Lecture Session Inactive. Click "Start Live Lecture" above to enable stream.</p>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-300">Camera Feed Paused</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Click the Camera button below to resume video broadcast.</p>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Studio Action Controls Footer */}
-            <div className="p-3.5 bg-[#080c14] border-t border-[#1b2538] flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handlePerformOcrScan}
-                  disabled={!isSessionActive || isOcrProcessing}
-                  isLoading={isOcrProcessing}
-                  leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+            {/* Bottom Controls Bar */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs px-3 py-2 sm:px-4 sm:py-2.5 flex items-center justify-between gap-2 w-full">
+              {/* Left Action Buttons (Mic, Camera, Share, Whiteboard, CC, Layout) */}
+              <div className="flex items-center justify-between flex-1 max-w-md sm:max-w-lg md:max-w-xl gap-1 sm:gap-2">
+                {/* 1. Microphone Toggle Button */}
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  className="flex flex-col items-center justify-center gap-1 py-1 px-1.5 sm:px-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group min-w-[44px] sm:min-w-[48px]"
+                  title={micActive ? 'Mute Microphone' : 'Unmute Microphone'}
                 >
-                  {isOcrProcessing ? 'Analyzing Board...' : 'Run Live Board OCR'}
-                </Button>
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    {micActive ? (
+                      <Mic className="w-5 h-5 text-slate-700 group-hover:text-slate-900 transition-colors" />
+                    ) : (
+                      <MicOff className="w-5 h-5 text-rose-500" />
+                    )}
+                  </div>
+                  <span className={`text-[11px] leading-none ${micActive ? 'text-slate-600 group-hover:text-slate-900 font-medium' : 'text-rose-500 font-semibold'}`}>
+                    Mic
+                  </span>
+                </button>
+
+                {/* 2. Camera Toggle Button */}
+                <button
+                  type="button"
+                  onClick={toggleCamera}
+                  className="flex flex-col items-center justify-center gap-1 py-1 px-1.5 sm:px-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group min-w-[44px] sm:min-w-[48px]"
+                  title={cameraActive ? 'Turn Camera Off' : 'Turn Camera On'}
+                >
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    {cameraActive ? (
+                      <Video className="w-5 h-5 text-slate-700 group-hover:text-slate-900 transition-colors" />
+                    ) : (
+                      <CameraOff className="w-5 h-5 text-rose-500" />
+                    )}
+                  </div>
+                  <span className={`text-[11px] leading-none ${cameraActive ? 'text-slate-600 group-hover:text-slate-900 font-medium' : 'text-rose-500 font-semibold'}`}>
+                    Camera
+                  </span>
+                </button>
+
+                {/* 3. Share / Board OCR Scan Button */}
+                <button
+                  type="button"
+                  onClick={handlePerformOcrScan}
+                  disabled={isOcrProcessing}
+                  className="flex flex-col items-center justify-center gap-1 py-1 px-1.5 sm:px-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group min-w-[44px] sm:min-w-[48px] disabled:opacity-50"
+                  title="Run Board OCR scan to extract blackboard / whiteboard formulas and text"
+                >
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <Share2 className="w-5 h-5 text-slate-700 group-hover:text-slate-900 transition-colors" />
+                  </div>
+                  <span className="text-[11px] leading-none text-slate-600 group-hover:text-slate-900 font-medium">
+                    {isOcrProcessing ? 'Scanning' : 'Share'}
+                  </span>
+                </button>
+
+                {/* 4. Whiteboard / AI Quiz Button */}
+                <button
+                  type="button"
+                  onClick={handleGenerateQuiz}
+                  disabled={isGeneratingQuiz}
+                  className="flex flex-col items-center justify-center gap-1 py-1 px-1.5 sm:px-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group min-w-[44px] sm:min-w-[48px] disabled:opacity-50"
+                  title="Generate interactive AI quiz from live lecture speech"
+                >
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <PenTool className="w-5 h-5 text-slate-700 group-hover:text-slate-900 transition-colors" />
+                  </div>
+                  <span className="text-[11px] leading-none text-slate-600 group-hover:text-slate-900 font-medium">
+                    {isGeneratingQuiz ? 'Quiz...' : 'Whiteboard'}
+                  </span>
+                </button>
+
+                {/* 5. Closed Captions CC Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsCcEnabled(!isCcEnabled)}
+                  className="flex flex-col items-center justify-center gap-1 py-1 px-1.5 sm:px-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group min-w-[44px] sm:min-w-[48px]"
+                  title="Toggle Closed Captions (CC) Overlay"
+                >
+                  <div className={`w-6 h-6 flex items-center justify-center rounded-md ${isCcEnabled ? 'bg-blue-50' : ''}`}>
+                    <MessageSquare className={`w-5 h-5 ${isCcEnabled ? 'text-blue-600' : 'text-slate-700 group-hover:text-slate-900'}`} />
+                  </div>
+                  <span className={`text-[11px] leading-none ${isCcEnabled ? 'text-blue-600 font-bold' : 'text-slate-600 group-hover:text-slate-900 font-medium'}`}>
+                    CC ({targetLang.toUpperCase()})
+                  </span>
+                </button>
+
+                {/* 6. Layout / STT Recognition Button */}
+                <button
+                  type="button"
+                  onClick={toggleSttRecognition}
+                  disabled={!isSttSupported}
+                  className="flex flex-col items-center justify-center gap-1 py-1 px-1.5 sm:px-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group min-w-[44px] sm:min-w-[48px]"
+                  title="Toggle Speech-to-Text Audio Recognition"
+                >
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <LayoutGrid className={`w-5 h-5 ${isSttActive ? 'text-emerald-600' : 'text-slate-700 group-hover:text-slate-900'} transition-colors`} />
+                  </div>
+                  <span className={`text-[11px] leading-none ${isSttActive ? 'text-emerald-600 font-bold' : 'text-slate-600 group-hover:text-slate-900 font-medium'}`}>
+                    Layout
+                  </span>
+                </button>
               </div>
 
-              {isSessionActive && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleGenerateQuiz}
-                    disabled={isGeneratingQuiz}
-                    isLoading={isGeneratingQuiz}
-                    leftIcon={<Zap className="w-3.5 h-3.5 text-amber-400" />}
-                  >
-                    Generate AI Quiz
-                  </Button>
+              {/* 7. Red END LIVE CLASS Button */}
+              <button
+                type="button"
+                onClick={handleEndLecture}
+                className="bg-[#c52222] hover:bg-[#b01e1e] active:scale-95 text-white font-bold px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer shrink-0 ml-2"
+              >
+                <PhoneOff className="w-4 h-4 shrink-0" />
+                <div className="text-left leading-tight">
+                  <div className="text-[10px] uppercase font-semibold tracking-wider text-red-100">END</div>
+                  <div className="text-xs font-black tracking-wide">LIVE CLASS</div>
                 </div>
-              )}
+              </button>
             </div>
-          </Card>
+          </div>
 
-          {/* OCR Board Detection Output Display */}
-          {ocrText && (
-            <Card variant="ai" className="p-4 space-y-2 animate-fade-in">
-              <div className="flex items-center justify-between border-b border-indigo-500/25 pb-2">
-                <h3 className="font-bold text-indigo-300 text-xs flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" /> Real-Time OCR Smart Board Extraction
-                </h3>
-                <span className="text-[10px] text-indigo-300 font-mono">Recognized Text</span>
-              </div>
-              <p className="text-xs font-mono text-slate-200 bg-[#080c14] p-3 rounded-lg border border-[#1b2538] leading-relaxed">
-                {ocrText}
-              </p>
-            </Card>
-          )}
-
-          {/* Live Audio Ingestion & Subtitle Stream */}
-          <Card variant="default" className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1b2538] pb-3">
-              <div>
-                <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
-                  <Volume2 className="w-4 h-4 text-sky-400" /> Live Speech-to-Text & Subtitle Stream
-                </h3>
-                <p className="text-[11px] text-slate-400">Subtitles generated in real time from microphone audio</p>
+          {/* Right Column: Q&A Panel matching Reference Image and aligned with left column */}
+          <div className="lg:col-span-4 flex flex-col h-full">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 flex flex-col flex-1 h-full min-h-[520px]">
+              {/* Panel Header: Title + NEW badge */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-slate-800" />
+                  <h3 className="font-bold text-slate-900 text-sm">Q&A</h3>
+                </div>
+                <span className="border border-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50">
+                  {raiseHandQueue.length} NEW
+                </span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <LanguageSelector
-                  selectedLanguage={targetLang}
-                  onLanguageChange={handleLanguageChange}
-                  size="sm"
+              {/* Search Questions Input */}
+              <div className="relative my-3 shrink-0">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search questions..."
+                  value={qaSearchQuery}
+                  onChange={(e) => setQaSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50/80 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 focus:bg-white text-slate-800 placeholder-slate-400 transition-colors"
                 />
               </div>
-            </div>
 
-            {/* STT Status Banner */}
-            {isSessionActive && (
-              <div className="p-3 rounded-xl bg-[#080c14] border border-[#1b2538] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <Mic className={`w-4 h-4 ${isSttActive ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
-                  <span className="text-slate-300 font-medium">
-                    {isSttActive
-                      ? 'Live Speech-to-Text Active: Ingesting speech audio.'
-                      : isSttSupported
-                      ? 'Live STT Paused. Click button to resume transcription.'
-                      : 'Web Speech API unavailable in this browser. Use manual input below.'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isSttSupported && (
-                    <button
-                      type="button"
-                      onClick={toggleSttRecognition}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        isSttActive
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
-                          : 'bg-[#121a2a] text-slate-300 border border-[#1b2538] hover:bg-slate-800'
-                      }`}
-                    >
-                      <Mic className="w-3 h-3" />
-                      <span>{isSttActive ? 'STT ON' : 'Turn STT ON'}</span>
-                    </button>
-                  )}
-                  <span className="text-[10px] font-mono font-bold text-slate-400 bg-[#0d131f] px-2 py-0.5 rounded border border-[#1b2538]">
-                    {(subtitles || []).length} Subs
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Ingest Input Form for Educator */}
-            <form onSubmit={handleIngestSubtitle} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Type or speak live audio transcript (e.g. 'Next topic: Convolutional Filters')..."
-                value={transcriptInput}
-                onChange={(e) => setTranscriptInput(e.target.value)}
-                disabled={!isSessionActive}
-                className="input-field text-xs"
-              />
-              <Button type="submit" disabled={!isSessionActive} variant="primary" size="sm" className="whitespace-nowrap">
-                Ingest
-              </Button>
-            </form>
-
-            {/* Live Subtitle Transcript Stream Box */}
-            <div ref={subtitleContainerRef} className="space-y-2 max-h-60 overflow-y-auto bg-[#080c14] p-3 rounded-xl border border-[#1b2538]">
-              {(!subtitles || subtitles.length === 0) ? (
-                <p className="text-xs text-slate-500 py-6 text-center">No speech transcripts ingested yet.</p>
-              ) : (
-                subtitles.map((sub) => (
-                  <div key={sub.id} className="p-2.5 rounded-lg bg-[#0d131f] border border-[#1b2538] text-xs">
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
-                      <span className="font-bold text-sky-400">{sub.speaker}</span>
-                      <span>{sub.timestamp}</span>
+              {/* Questions List (Scrollable) */}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {filteredQuestions.length === 0 ? (
+                  <div className="text-center py-12 px-4 space-y-2">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1d3bb5] flex items-center justify-center mx-auto">
+                      <HelpCircle className="w-5 h-5" />
                     </div>
-                    <p className="text-slate-100 font-medium">{sub.text}</p>
+                    <p className="text-xs font-semibold text-slate-700">
+                      {qaSearchQuery ? 'No matching questions found' : 'No questions yet'}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      {qaSearchQuery
+                        ? 'Try searching with different terms'
+                        : 'Students can raise their hands to ask questions during the live class.'}
+                    </p>
                   </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Right 1 Col: Connected Students, Raised Hand Queue, Quizzes & Export Downloads */}
-        <div className="space-y-6">
-          {/* Connected Live Students */}
-          <Card variant="default" className="space-y-3.5">
-            <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
-              <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
-                <Users className="w-4 h-4 text-sky-400" /> Connected Students ({(connectedStudents || []).length})
-              </h3>
-              <Badge variant={isSessionActive ? 'success' : 'neutral'} size="sm" dot pulse={isSessionActive}>
-                {isSessionActive ? 'LIVE' : 'IDLE'}
-              </Badge>
-            </div>
-
-            <div className="space-y-2 max-h-56 overflow-y-auto">
-              {!isSessionActive ? (
-                <p className="text-xs text-slate-500 py-6 text-center">Start a lecture session to see connected students.</p>
-              ) : (!connectedStudents || connectedStudents.length === 0) ? (
-                <p className="text-xs text-slate-500 py-6 text-center">No students currently connected to live stream.</p>
-              ) : (
-                connectedStudents.map((st, idx) => {
-                  const name = st.full_name || st.student_name || `Student #${st.student_id || idx + 1}`;
-                  const sId = st.student_id || st.id || idx + 1;
-                  return (
-                    <div key={st.id || idx} className="p-2.5 rounded-xl bg-[#080c14] border border-[#1b2538] flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
-                        <div className="truncate">
-                          <div className="font-bold text-slate-200 truncate">{name}</div>
-                          <div className="text-[10px] text-slate-400 truncate">Roll: {st.roll_number || `S-${100 + sId}`}</div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleKickStudent(sId, name)}
-                        className="px-2 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
-                        title="Kick student out of class"
+                ) : (
+                  filteredQuestions.map((item) => {
+                    const initials = item.student_name
+                      ? item.student_name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2)
+                      : 'ST';
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-3.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 transition-colors space-y-2"
                       >
-                        <UserX className="w-3 h-3 text-rose-400" /> Kick
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </Card>
+                        {/* Student Name & Avatar + Time */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px] flex items-center justify-center shrink-0">
+                              {initials}
+                            </div>
+                            <span className="font-bold text-xs text-slate-900 truncate">
+                              {item.student_name}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            {item.created_at || '01:12 PM'}
+                          </span>
+                        </div>
 
-          {/* Live Student Raised Hand Queue */}
-          <Card variant="default" className="space-y-3.5">
-            <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
-              <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
-                <HelpCircle className="w-4 h-4 text-amber-400" /> Raised Hand Assistance Queue
-              </h3>
-              <Badge variant="warning" size="sm">
-                {(raiseHandQueue || []).length} Pending
-              </Badge>
-            </div>
+                        {/* Question Content */}
+                        <p className="text-xs text-slate-700 leading-relaxed font-normal">
+                          “{item.question_text}”
+                        </p>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto">
-              {(!raiseHandQueue || raiseHandQueue.length === 0) ? (
-                <p className="text-xs text-slate-500 py-6 text-center">No pending student assistance requests.</p>
-              ) : (
-                raiseHandQueue.map((item) => (
-                  <div key={item.id} className="p-3 rounded-xl bg-[#080c14] border border-amber-500/25 text-xs space-y-2">
-                    <div className="flex items-center justify-between font-bold text-slate-200">
-                      <span>{item.student_name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">{item.created_at}</span>
-                    </div>
-                    <p className="text-slate-300 text-[11px]">{item.question_text}</p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleResolveHand(item.id)}
-                      className="w-full text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-                      leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                    >
-                      Call On & Resolve
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-
-          {/* Generated AI Quizzes */}
-          {((quizzes || []).length > 0) && (
-            <Card variant="ai" className="space-y-3 p-4">
-              <h3 className="font-bold text-indigo-300 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
-                <BookOpen className="w-4 h-4" /> AI Generated Quizzes & Flashcards
-              </h3>
-              <div className="space-y-2 max-h-60 overflow-y-auto text-xs">
-                {(quizzes || []).map((q) => (
-                  <div key={q.id} className="p-2.5 rounded-lg bg-[#080c14] border border-[#1b2538] space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-indigo-400 font-mono">{q.type}</span>
-                    <div className="font-semibold text-slate-100">{q.question}</div>
-                    <div className="text-[11px] text-emerald-400">Answer: {q.correct_answer}</div>
-                  </div>
-                ))}
+                        {/* Answer Button matching Reference */}
+                        <button
+                          type="button"
+                          onClick={() => handleResolveHand(item.id)}
+                          className="border border-blue-500/40 hover:bg-blue-50 text-blue-600 font-semibold text-xs py-1.5 px-3 rounded-lg w-full flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <span>↩ Answer</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            </Card>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Secondary Tools Section: OCR results, Connected Students, Live Speech Stream */}
+      {isSessionActive && (
+        <div className="space-y-4 pt-1">
+          {/* Real-time OCR Board Extraction Result Card */}
+          {ocrText && (
+            <div className="bg-white rounded-2xl border border-purple-200/80 shadow-xs p-4 sm:p-5 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-purple-100 pb-2.5">
+                <h3 className="font-bold text-purple-900 text-xs sm:text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  Real-Time OCR Smart Board Extraction
+                </h3>
+                <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full font-mono">
+                  Text Recognized
+                </span>
+              </div>
+              <p className="text-xs font-mono text-slate-800 bg-slate-50 p-3.5 rounded-xl border border-slate-200 leading-relaxed whitespace-pre-wrap">
+                {ocrText}
+              </p>
+            </div>
           )}
 
-          {/* Export & Download Hub */}
-          {(() => {
-            const exportTargetSessionId = sessionId || lastCompletedSessionId;
-            return (
-              <Card variant="default" className="space-y-3">
-                <div className="flex items-center justify-between border-b border-[#1b2538] pb-2">
-                  <h3 className="font-bold text-slate-100 text-xs sm:text-sm flex items-center gap-2 tracking-tight">
-                    <Download className="w-4 h-4 text-sky-400" /> Export Artifacts
+          {/* Balanced 2-Column Grid: Connected Students Roster (Col 1) + Live Speech-to-Text Stream (Col 2) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5 items-start">
+            {/* Connected Students Roster */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 space-y-3.5 flex flex-col h-full min-h-[320px]">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  Connected Students ({(connectedStudents || []).length})
+                </h3>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  LIVE
+                </span>
+              </div>
+
+              <div className="space-y-2 flex-1 max-h-64 overflow-y-auto pr-1">
+                {!connectedStudents || connectedStudents.length === 0 ? (
+                  <div className="text-center py-10 space-y-1">
+                    <p className="text-xs font-semibold text-slate-600">No students currently connected</p>
+                    <p className="text-[11px] text-slate-400">Students will appear here as soon as they join your live session.</p>
+                  </div>
+                ) : (
+                  connectedStudents.map((st, idx) => {
+                    const name = st.full_name || st.student_name || `Student #${st.student_id || idx + 1}`;
+                    const sId = st.student_id || st.id || idx + 1;
+                    return (
+                      <div
+                        key={st.id || idx}
+                        className="p-2.5 rounded-xl bg-slate-50/60 border border-slate-200 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                          <div className="truncate">
+                            <div className="font-bold text-slate-800 truncate">{name}</div>
+                            <div className="text-[10px] text-slate-400 truncate">
+                              Roll: {st.roll_number || `S-${100 + sId}`}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleKickStudent(sId, name)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+                          title="Remove student from session"
+                        >
+                          <UserX className="w-3 h-3" /> Kick
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Live Subtitle Transcript Stream & Ingest Hub */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 space-y-3.5 flex flex-col h-full min-h-[320px]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-[#1d3bb5]" />
+                    Live Speech-to-Text & Subtitle Stream
                   </h3>
-                  {lastCompletedSessionId && !sessionId && (
-                    <Badge variant="ai" size="sm">
-                      Session #{lastCompletedSessionId} Saved
-                    </Badge>
-                  )}
+                  <p className="text-[11px] text-slate-500 mt-0.5">Real-time transcripts generated from spoken microphone audio.</p>
                 </div>
+              </div>
 
-                <div className="space-y-2 text-xs">
-                  <a
-                    href={exportTargetSessionId ? exportApi.downloadSummaryUrl(exportTargetSessionId) : '#'}
-                    download
-                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
-                  >
-                    <span>AI Summary (PDF)</span>
-                    <Download className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
+              {/* Ingestion form */}
+              <form onSubmit={handleIngestSubtitle} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Type or dictate live speech transcript..."
+                  value={transcriptInput}
+                  onChange={(e) => setTranscriptInput(e.target.value)}
+                  disabled={!isSessionActive}
+                  className="flex-1 px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#1d3bb5] focus:bg-white text-slate-900 transition-colors"
+                />
+                <button
+                  type="submit"
+                  disabled={!isSessionActive || !transcriptInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-[#1d3bb5] hover:bg-[#173099] text-white font-bold text-xs shadow-xs transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  Ingest
+                </button>
+              </form>
 
-                  <a
-                    href={exportTargetSessionId ? exportApi.downloadSubtitlesUrl(exportTargetSessionId) : '#'}
-                    download
-                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
-                  >
-                    <span>Captions (VTT)</span>
-                    <Download className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
-
-                  <a
-                    href={exportTargetSessionId ? exportApi.downloadTranscriptUrl(exportTargetSessionId) : '#'}
-                    download
-                    className={`btn-secondary w-full justify-between ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
-                  >
-                    <span>Transcript (TXT)</span>
-                    <Download className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
-
-                  <a
-                    href={exportTargetSessionId ? exportApi.downloadAudioUrl(exportTargetSessionId) : '#'}
-                    download
-                    className={`btn-secondary w-full justify-between text-emerald-400 border-emerald-500/30 ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
-                  >
-                    <span>Audio Recording (WEBM)</span>
-                    <Download className="w-3.5 h-3.5 text-emerald-400" />
-                  </a>
-
-                  <a
-                    href={exportTargetSessionId ? exportApi.downloadRecordingUrl(exportTargetSessionId) : '#'}
-                    download
-                    className={`btn-secondary w-full justify-between text-sky-400 border-sky-500/30 ${!exportTargetSessionId ? 'opacity-40 pointer-events-none' : ''}`}
-                  >
-                    <span>Full Video Recording (WEBM)</span>
-                    <Download className="w-3.5 h-3.5 text-sky-400" />
-                  </a>
-                </div>
-              </Card>
-            );
-          })()}
+              {/* Subtitle list container */}
+              <div
+                ref={subtitleContainerRef}
+                className="space-y-2 flex-1 max-h-48 overflow-y-auto bg-slate-50/60 p-3 rounded-xl border border-slate-200"
+              >
+                {!subtitles || subtitles.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No speech transcripts ingested yet.</p>
+                ) : (
+                  subtitles.map((sub) => (
+                    <div key={sub.id} className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs">
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
+                        <span className="font-bold text-[#1d3bb5]">{sub.speaker}</span>
+                        <span>{sub.timestamp}</span>
+                      </div>
+                      <p className="text-slate-800 font-medium">{sub.text}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

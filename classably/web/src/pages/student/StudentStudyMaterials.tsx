@@ -17,7 +17,7 @@ export const StudentStudyMaterials: React.FC = () => {
   const [notes, setNotes] = useState<any[]>([]);
   const [recordings, setRecordings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'materials' | 'recordings' | 'notes'>('materials');
+  const [activeTab, setActiveTab] = useState<'materials' | 'recordings' | 'notes'>('recordings');
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [isCreatingNote, setIsCreatingNote] = useState(false);
@@ -98,24 +98,18 @@ export const StudentStudyMaterials: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in max-w-5xl">
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
-            <FolderDown className="w-5 h-5 text-emerald-400" /> Study Materials & Repository
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight">
+            Lecture Downloads & Recordings
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Download lecture recordings, VTT subtitles, transcripts, AI summaries & course documents</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Download your lecture video, audio, subtitles, transcripts, and generated summary files.
+          </p>
         </div>
 
-        <Tabs
-          tabs={[
-            { id: 'materials', label: 'Course Files', count: (materials || []).length },
-            { id: 'recordings', label: 'Recordings', count: (recordings || []).length },
-            { id: 'notes', label: 'AI Notes', count: (notes || []).length },
-          ]}
-          activeTab={activeTab}
-          onChange={(tab) => setActiveTab(tab as any)}
-        />
       </div>
 
       {/* Materials Tab */}
@@ -139,20 +133,20 @@ export const StudentStudyMaterials: React.FC = () => {
                     <Badge variant="brand" size="sm">
                       {m.file_type || 'PDF'}
                     </Badge>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 font-mono">
-                      <Globe className="w-3 h-3 text-sky-400" /> {m.language || 'en'}
+                    <span className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1 font-mono">
+                      <Globe className="w-3 h-3 text-[#1d3bb5]" /> {m.language || 'en'}
                     </span>
                   </div>
-                  <h3 className="font-bold text-slate-100 text-sm sm:text-base mt-2 tracking-tight">{m.title}</h3>
-                  <p className="text-xs text-slate-400 mt-1">{m.description || 'Reference study document uploaded by instructor.'}</p>
+                  <h3 className="font-bold text-[#111827] text-sm sm:text-base mt-2 tracking-tight">{m.title}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{m.description || 'Reference study document uploaded by instructor.'}</p>
                 </div>
 
-                <div className="pt-3 border-t border-[#1b2538] flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">By: <strong className="text-slate-300">{m.teacher_name || 'Instructor'}</strong></span>
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">By: <strong className="text-slate-700">{m.teacher_name || 'Instructor'}</strong></span>
                   <a
                     href={`/${m.file_path}`}
                     download
-                    className="btn-secondary text-xs py-1.5"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 shadow-sm transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" /> Download
                   </a>
@@ -167,8 +161,8 @@ export const StudentStudyMaterials: React.FC = () => {
       {activeTab === 'recordings' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
-              <Video className="w-4 h-4 text-sky-400" /> Lecture Media & Artifacts
+            <h3 className="font-bold text-[#111827] text-base flex items-center gap-2 tracking-tight">
+              <Video className="w-4 h-4 text-[#1d3bb5]" /> Lecture Media & Artifacts
             </h3>
             <Button
               variant="secondary"
@@ -184,59 +178,75 @@ export const StudentStudyMaterials: React.FC = () => {
           <div className="space-y-3.5">
             {recordings.map((s) => (
               <Card key={s.id} variant="default" className="p-5 space-y-3.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1b2538] pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
                     <div className="flex items-center gap-2">
                       <Badge variant="brand" size="sm">
                         Session #{s.id}
                       </Badge>
-                      <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{s.subject}</h3>
+                      <h3 className="font-bold text-[#111827] text-sm sm:text-base tracking-tight">{s.subject}</h3>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">Educator: {s.teacher_name || 'Faculty Teacher'} • Topic: {s.topic || 'Lecture'}</p>
+                    <p className="text-xs text-slate-500 mt-1">Educator: {s.teacher_name || 'Faculty Teacher'} • Topic: {s.topic || 'Lecture'}</p>
                   </div>
-                  <div className="text-xs text-slate-400 font-mono bg-[#080c14] px-3 py-1 rounded-lg border border-[#1b2538] self-start sm:self-auto">
+                  <div className="text-xs text-slate-600 font-mono bg-slate-50 px-3 py-1 rounded-lg border border-slate-200 self-start sm:self-auto">
                     {s.date || 'Today'} ({s.duration || '45 mins'})
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                  <a href={exportApi.downloadRecordingUrl(s.id)} download className="btn-secondary py-2 justify-between text-sky-400 border-sky-500/30">
+                  <a
+                    href={exportApi.downloadRecordingUrl(s.id)}
+                    download
+                    className="inline-flex items-center justify-between px-3 py-2 bg-white hover:bg-slate-50 text-[#1d3bb5] border border-[#dbeafe] rounded-lg font-semibold transition-colors shadow-sm"
+                  >
                     <span className="flex items-center gap-1">
                       <Video className="w-3.5 h-3.5" /> MP4 Video
                     </span>
                     <Download className="w-3 h-3" />
                   </a>
 
-                  <a href={exportApi.downloadAudioUrl(s.id)} download className="btn-secondary py-2 justify-between text-emerald-400 border-emerald-500/30">
+                  <a
+                    href={exportApi.downloadAudioUrl(s.id)}
+                    download
+                    className="inline-flex items-center justify-between px-3 py-2 bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-200 rounded-lg font-semibold transition-colors shadow-sm"
+                  >
                     <span className="flex items-center gap-1">
                       <Volume2 className="w-3.5 h-3.5" /> MP3 Audio
                     </span>
                     <Download className="w-3 h-3" />
                   </a>
 
-                  <a href={exportApi.downloadSubtitlesUrl(s.id)} download className="btn-secondary py-2 justify-between">
+                  <a
+                    href={exportApi.downloadSubtitlesUrl(s.id)}
+                    download
+                    className="inline-flex items-center justify-between px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg font-semibold transition-colors shadow-sm"
+                  >
                     <span className="flex items-center gap-1">
-                      <FileText className="w-3.5 h-3.5 text-sky-400" /> Subtitles (VTT)
+                      <FileText className="w-3.5 h-3.5 text-[#1d3bb5]" /> Subtitles (VTT)
                     </span>
                     <Download className="w-3 h-3" />
                   </a>
 
-                  <a href={exportApi.downloadTranscriptUrl(s.id)} download className="btn-secondary py-2 justify-between">
+                  <a
+                    href={exportApi.downloadTranscriptUrl(s.id)}
+                    download
+                    className="inline-flex items-center justify-between px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg font-semibold transition-colors shadow-sm"
+                  >
                     <span className="flex items-center gap-1">
-                      <FileText className="w-3.5 h-3.5 text-emerald-400" /> Transcript
+                      <FileText className="w-3.5 h-3.5 text-emerald-600" /> Transcript
                     </span>
                     <Download className="w-3 h-3" />
                   </a>
 
                   <button
                     onClick={() => speakText(`Lecture recording for ${s.subject}. Topic: ${s.topic || 'General Lecture'}. Instructor: ${s.teacher_name || 'Faculty Teacher'}.`)}
-                    className="btn-secondary py-2 justify-between text-amber-300 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer"
+                    className="inline-flex items-center justify-between px-3 py-2 bg-amber-50 hover:bg-amber-100/70 text-amber-800 border border-amber-200 rounded-lg font-semibold transition-colors shadow-sm cursor-pointer"
                     title="Listen to Lecture Info Read Aloud for Blind Students"
                   >
                     <span className="flex items-center gap-1">
-                      <Volume2 className="w-3.5 h-3.5 text-amber-400" /> Read Aloud
+                      <Volume2 className="w-3.5 h-3.5 text-amber-600" /> Read Aloud
                     </span>
-                    <Sparkles className="w-3 h-3" />
+                    <Sparkles className="w-3 h-3 text-amber-600" />
                   </button>
                 </div>
               </Card>
@@ -249,8 +259,8 @@ export const StudentStudyMaterials: React.FC = () => {
       {activeTab === 'notes' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
-              <Sparkles className="w-4 h-4 text-indigo-400" /> Smart AI Notes Stream
+            <h3 className="font-bold text-[#111827] text-base flex items-center gap-2 tracking-tight">
+              <Sparkles className="w-4 h-4 text-[#1d3bb5]" /> Smart AI Notes Stream
             </h3>
             <Button
               variant="primary"
@@ -263,14 +273,14 @@ export const StudentStudyMaterials: React.FC = () => {
           </div>
 
           {showCreateModal && (
-            <Card variant="ai" className="p-5 space-y-3.5">
-              <h4 className="font-bold text-slate-100 text-xs uppercase tracking-wider font-mono">New Smart Note Entry</h4>
+            <Card variant="default" className="p-5 space-y-3.5 border-[#dbeafe]">
+              <h4 className="font-bold text-[#111827] text-xs uppercase tracking-wider">New Smart Note Entry</h4>
               <input
                 type="text"
                 placeholder="Note Title..."
                 value={newNoteTitle}
                 onChange={(e) => setNewNoteTitle(e.target.value)}
-                className="input-field text-xs"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
                 required
               />
               <textarea
@@ -278,10 +288,10 @@ export const StudentStudyMaterials: React.FC = () => {
                 placeholder="Note content, summary or key takeaway..."
                 value={newNoteContent}
                 onChange={(e) => setNewNoteContent(e.target.value)}
-                className="input-field text-xs resize-none"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none resize-none"
                 required
               />
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#1b2538]">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button
                   type="button"
                   variant="secondary"
@@ -317,13 +327,13 @@ export const StudentStudyMaterials: React.FC = () => {
               (notes || []).map((n: any) => (
                 <Card key={n.id} variant="default" className="p-5 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <Badge variant="ai" size="sm">
+                    <Badge variant="brand" size="sm">
                       {n.subject || 'AI & Accessibility'}
                     </Badge>
                     <span className="text-[10px] text-slate-400 font-mono">{n.created_at || 'Today'}</span>
                   </div>
-                  <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{n.title}</h3>
-                  <p className="text-xs text-slate-300 leading-relaxed">{n.content}</p>
+                  <h3 className="font-bold text-[#111827] text-sm sm:text-base tracking-tight">{n.title}</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">{n.content}</p>
                 </Card>
               ))
             )}
@@ -333,3 +343,4 @@ export const StudentStudyMaterials: React.FC = () => {
     </div>
   );
 };
+

@@ -39,7 +39,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
           id={inputId}
           disabled={disabled}
           className={`w-full bg-white border ${
-            error ? 'border-rose-500/80 focus:border-rose-500 focus:ring-rose-500/30' : 'border-slate-300 focus:border-teal-600 focus:ring-teal-600/20'
+            error ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/20' : 'border-slate-300 focus:border-[#1d3bb5] focus:ring-[#1d3bb5]/20'
           } focus:ring-2 rounded-lg ${
             leftIcon ? 'pl-9' : 'pl-3.5'
           } ${

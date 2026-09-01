@@ -30,7 +30,6 @@ export const authApi = {
     api.post('/api/auth/otp/send', { email, purpose }),
   verifyOtp: (email: string, otp: string, purpose: 'register' | 'login' | 'reset_password' = 'register') =>
     api.post('/api/auth/otp/verify', { email, otp, purpose }),
-  registerWithOtp: (data: any) => api.post('/api/auth/register-with-otp', data),
   loginWithOtp: (email: string, otp: string) =>
     api.post('/api/auth/login-with-otp', { email, otp }),
   resetPasswordWithOtp: (data: { email: string; otp: string; new_password: string; confirm_password?: string }) =>

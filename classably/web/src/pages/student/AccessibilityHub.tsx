@@ -79,38 +79,40 @@ export const AccessibilityHub: React.FC = () => {
     { id: 'low_vision', label: 'Low Vision', desc: 'Zoom controls, bold fonts, minimal uncluttered layout', icon: Type },
     { id: 'hearing_impairment', label: 'Hearing Impairment', desc: 'Real-time live subtitles stream, transcript panel, downloadable VTT captions', icon: Volume2 },
     { id: 'language_barrier', label: 'Language Barrier', desc: 'Multi-lingual automatic translation for subtitles, OCR, and AI summaries', icon: Globe },
-    { id: 'motor_disability', label: 'Motor Disability', desc: 'Hands-free voice assistant commands, large click targets, raise-hand shortcut', icon: Sparkles },
     { id: 'multiple_disabilities', label: 'Multiple Disabilities', desc: 'Combined multi-modal assistive features & accommodations', icon: Contrast },
   ];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-5xl animate-fade-in">
+      {/* Page Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2.5 tracking-tight">
-          <Sparkles className="w-5 h-5 text-sky-400" /> Accessibility Adaptations Hub
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight">
+          Accessibility Adaptations Hub
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Select your accommodation profiles to instantly tailor ClassAbly's visual, audio, and interaction systems</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Select your accommodation profiles to instantly tailor ClassAbly's visual, audio, and interaction systems
+        </p>
       </div>
 
       {/* Adaptive Profile AI Recommendation Panel */}
-      <Card variant="ai" className="p-5">
-        <div className="flex items-center gap-2 text-[10px] font-mono text-indigo-300 font-bold uppercase tracking-wider mb-2">
-          <Cpu className="w-4 h-4 text-indigo-400" /> AI Adaptive Profile Recommendation
+      <Card variant="default" className="p-5 sm:p-6 border-[#dbeafe] bg-gradient-to-r from-white via-white to-blue-50/30">
+        <div className="flex items-center gap-2 text-[10px] font-mono text-[#1d3bb5] font-bold uppercase tracking-wider mb-2">
+          <Cpu className="w-4 h-4 text-[#1d3bb5]" /> AI Adaptive Profile Recommendation
         </div>
         {loadingRec ? (
           <p className="text-xs text-slate-400 py-3">Analyzing environment and interaction history...</p>
         ) : (
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h3 className="font-bold text-slate-100 text-sm tracking-tight">
-                Recommended Mode: <span className="text-sky-300 capitalize">{recommendation?.recommended_mode?.replace('_', ' ')}</span>
+              <h3 className="font-bold text-[#111827] text-sm sm:text-base tracking-tight">
+                Recommended Mode: <span className="text-[#1d3bb5] capitalize">{recommendation?.recommended_mode?.replace('_', ' ')}</span>
               </h3>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 {recommendation?.reasoning || 'Engine recommends optimized contrast and TTS based on classroom sensors.'}
               </p>
             </div>
             {recommendation?.confidence_score && (
-              <Badge variant="ai" size="md">
+              <Badge variant="brand" size="md">
                 {(recommendation.confidence_score * 100).toFixed(0)}% AI Match
               </Badge>
             )}
@@ -126,25 +128,29 @@ export const AccessibilityHub: React.FC = () => {
           return (
             <Card
               key={p.id}
-              variant={isActive ? 'ai' : 'interactive'}
+              variant="default"
               onClick={() => handleToggleProfile(p.id, p.label, isActive)}
-              className={`p-5 cursor-pointer flex flex-col justify-between ${isActive ? 'border-sky-500/60 ring-1 ring-sky-500/30' : ''}`}
+              className={`p-5 sm:p-6 cursor-pointer flex flex-col justify-between transition-all ${
+                isActive
+                  ? 'border-[#1d3bb5] ring-2 ring-[#1d3bb5]/20 bg-[#eff4ff]/30 shadow-sm'
+                  : 'hover:border-slate-300 hover:bg-slate-50/50'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className={`p-2.5 rounded-xl shrink-0 ${isActive ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-800 text-slate-400'}`}>
+                <div className="flex items-start gap-3.5">
+                  <div className={`p-2.5 rounded-xl shrink-0 ${isActive ? 'bg-[#1d3bb5] text-white shadow-sm' : 'bg-slate-100 text-slate-600'}`}>
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-100 text-sm sm:text-base tracking-tight">{p.label}</h3>
-                    <p className="text-xs text-slate-400 mt-1">{p.desc}</p>
+                    <h3 className="font-bold text-[#111827] text-sm sm:text-base tracking-tight">{p.label}</h3>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">{p.desc}</p>
                   </div>
                 </div>
-                {isActive && <Check className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />}
+                {isActive && <Check className="w-5 h-5 text-[#1d3bb5] shrink-0 mt-0.5" />}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#1b2538] flex items-center justify-between text-xs font-semibold">
-                <span className={isActive ? 'text-sky-400' : 'text-slate-500'}>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
+                <span className={isActive ? 'text-[#1d3bb5] font-bold' : 'text-slate-500'}>
                   {isActive ? 'Accommodation Active' : 'Click to Activate'}
                 </span>
               </div>
@@ -154,28 +160,28 @@ export const AccessibilityHub: React.FC = () => {
       </div>
 
       {/* Fine-Tuning Controls */}
-      <Card variant="default" className="space-y-5">
-        <h3 className="font-bold text-slate-100 text-sm border-b border-[#1b2538] pb-3 tracking-tight">
+      <Card variant="default" className="p-5 sm:p-6 space-y-5">
+        <h3 className="font-bold text-[#111827] text-base border-b border-slate-100 pb-3 tracking-tight">
           Fine-Tune Display & Speech Settings
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {/* High Contrast Mode */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">High Contrast Theme</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-2">High Contrast Theme</label>
             <div className="space-y-2 text-xs">
               {[
-                { mode: 'none', label: 'Default Dark Theme' },
+                { mode: 'none', label: 'Default Light Theme' },
                 { mode: 'yellow-on-black', label: 'Black Background & Gold Text' },
                 { mode: 'black-on-white', label: 'White Background & Black Text' },
               ].map((item) => (
                 <button
                   key={item.mode}
                   onClick={() => handleContrastChange(item.mode)}
-                  className={`w-full p-2.5 rounded-lg border text-left font-semibold transition-all duration-150 ${
+                  className={`w-full p-2.5 rounded-lg border text-left font-semibold transition-all duration-150 cursor-pointer ${
                     contrastMode === item.mode
-                      ? 'bg-sky-600 border-sky-500 text-white shadow-sm'
-                      : 'bg-[#080c14] border-[#1b2538] text-slate-300 hover:bg-[#121a2a]'
+                      ? 'bg-[#1d3bb5] border-[#1d3bb5] text-white shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   {item.label}
@@ -186,7 +192,7 @@ export const AccessibilityHub: React.FC = () => {
 
           {/* Speech Synthesis (TTS) Controls */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">Text-to-Speech Screen Narrator</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-2">Text-to-Speech Screen Narrator</label>
             <div className="space-y-2.5">
               <Button
                 variant={ttsEnabled ? 'primary' : 'secondary'}
@@ -213,7 +219,7 @@ export const AccessibilityHub: React.FC = () => {
                   size="sm"
                   onClick={() => speakText('ClassAbly Smart Classroom Accessibility Platform is fully functional.')}
                   className="flex-1"
-                  leftIcon={<Volume2 className="w-3.5 h-3.5 text-sky-400" />}
+                  leftIcon={<Volume2 className="w-3.5 h-3.5 text-[#1d3bb5]" />}
                 >
                   Test Voice
                 </Button>
@@ -221,7 +227,7 @@ export const AccessibilityHub: React.FC = () => {
                   variant="secondary"
                   size="sm"
                   onClick={stopSpeech}
-                  className="text-rose-400 hover:text-rose-300"
+                  className="text-rose-600 hover:text-rose-700"
                   leftIcon={<VolumeX className="w-3.5 h-3.5" />}
                 >
                   Stop
@@ -274,10 +280,10 @@ const ProfileSettingsSection: React.FC = () => {
   };
 
   return (
-    <Card variant="default" className="space-y-4">
-      <div className="flex items-center justify-between border-b border-[#1b2538] pb-3">
-        <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2 tracking-tight">
-          <Sparkles className="w-4 h-4 text-sky-400" /> Profile & Classroom Settings
+    <Card variant="default" className="p-5 sm:p-6 space-y-4">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 className="font-bold text-[#111827] text-base flex items-center gap-2 tracking-tight">
+          <Sparkles className="w-4 h-4 text-[#1d3bb5]" /> Profile & Classroom Settings
         </h3>
         {saveSuccess && (
           <Badge variant="success" size="sm">
@@ -288,34 +294,34 @@ const ProfileSettingsSection: React.FC = () => {
 
       <form onSubmit={handleSaveProfile} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
           <input
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="input-field text-xs"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
             placeholder="Your full name"
             required
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Phone Number</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
           <input
             type="text"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="input-field text-xs"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
             placeholder="+1 555-0199"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Assigned Classroom</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Classroom</label>
           <select
             value={classroomId}
             onChange={(e) => setClassroomId(Number(e.target.value))}
-            className="input-field text-xs bg-[#080c14] text-slate-200"
+            className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 focus:border-[#1d3bb5] focus:ring-2 focus:ring-[#1d3bb5]/20 outline-none"
           >
             <option value={1}>Smart Classroom 1 (Main Block)</option>
             <option value={2}>Smart Classroom 2 (Science Block)</option>
@@ -338,3 +344,4 @@ const ProfileSettingsSection: React.FC = () => {
     </Card>
   );
 };
+

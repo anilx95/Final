@@ -23,12 +23,12 @@ export const Button: React.FC<ButtonProps> = ({
   const baseClasses = 'inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-50';
 
   const variantClasses = {
-    primary: 'bg-teal-700 hover:bg-teal-800 text-white shadow-sm focus:ring-teal-600/40',
-    secondary: 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 focus:ring-slate-300',
+    primary: 'btn-primary bg-[#1d3bb5] hover:bg-[#173099] text-white !text-white font-bold shadow-sm focus:ring-[#1d3bb5]/40',
+    secondary: 'btn-secondary bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 focus:ring-slate-300',
     outline: 'bg-transparent hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-slate-300 focus:ring-slate-300',
-    ghost: 'bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 focus:ring-slate-300',
-    danger: 'bg-rose-600/90 hover:bg-rose-500 text-white shadow-sm hover:shadow-rose-500/20 focus:ring-rose-500/50',
-    ai: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm focus:ring-indigo-500/40',
+    ghost: 'btn-ghost bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 focus:ring-slate-300',
+    danger: 'btn-danger bg-rose-600 hover:bg-rose-700 text-white !text-white font-bold shadow-sm focus:ring-rose-500/50',
+    ai: 'btn-ai bg-[#1d3bb5] hover:bg-[#173099] text-white !text-white font-bold shadow-sm focus:ring-[#1d3bb5]/40',
   };
 
   const sizeClasses = {

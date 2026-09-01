@@ -66,19 +66,6 @@ INTENT_PATTERNS = [
     ]),
 
     # -------------------------
-    # DESK
-    # -------------------------
-    ("desk_up", [
-        r"\braise (?:the )?desk\b",
-        r"\bdesk up\b",
-    ]),
-
-    ("desk_down", [
-        r"\blower (?:the )?desk\b",
-        r"\bdesk down\b",
-    ]),
-
-    # -------------------------
     # SLIDES
     # -------------------------
     ("next_slide", [

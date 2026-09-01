@@ -23,13 +23,18 @@ class LectureSessionService:
         return it instead of creating another.
         """
 
-        active = lecture_session_repository.get_active_session(
-            db=db,
-            classroom_id=classroom_id,
+        # Close any previous active sessions for this classroom so new class starts with exact current time
+        existing_actives = (
+            db.query(LectureSession)
+            .filter(
+                LectureSession.classroom_id == classroom_id,
+                LectureSession.status == "ACTIVE",
+            )
+            .all()
         )
-
-        if active:
-            return active
+        for old in existing_actives:
+            old.status = "ENDED"
+            old.ended_at = datetime.utcnow()
 
         session = LectureSession(
             classroom_id=classroom_id,

@@ -23,8 +23,6 @@ DEVICE_INTENT_MAP = {
     "fan_off": ("fan", "set", {"on": False}),
     "curtains_open": ("curtain", "set", {"open": True}),
     "curtains_close": ("curtain", "set", {"open": False}),
-    "desk_up": ("desk", "set", {"height_cm": 82}),
-    "desk_down": ("desk", "set", {"height_cm": 68}),
     "next_slide": ("projector", "set", {"slide": "+1"}),
     "previous_slide": ("projector", "set", {"slide": "-1"}),
 }
